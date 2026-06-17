@@ -1,4 +1,4 @@
-use oxid_fenix::{db::postgres::connect, error::AppError};
+use oxid_fenix::{app::app::{AppState, build_router}, db::postgres::connect, error::AppError};
 
 
 #[tokio::main]
@@ -12,6 +12,10 @@ async fn main() {
 async fn run() -> Result<(), AppError>{
     dotenvy::dotenv().ok();
     let pool = connect().await?;
-    println!("Connected postgres");
+    let state = AppState { pool };
+    let app = build_router(state);
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    axum::serve(listener, app).await?;
     Ok(())
 }
