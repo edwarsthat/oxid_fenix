@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+use crate::app::app::AppState;
+
 
 #[derive(Deserialize)]
 pub struct WsRequest {
@@ -27,4 +29,8 @@ impl WsResponse {
             data: serde_json::Value::Null,
         }
     }
+}
+
+pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
+    
 }
