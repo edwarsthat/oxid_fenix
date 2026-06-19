@@ -1,5 +1,13 @@
+use axum::{
+    Router,
+    extract::{
+        State,
+        ws::{WebSocket, WebSocketUpgrade},
+    },
+    response::IntoResponse,
+    routing::get,
+};
 use sqlx::PgPool;
-use axum::{Router, extract::{State, ws::{WebSocket, WebSocketUpgrade}}, response::IntoResponse, routing::get};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -17,23 +25,23 @@ async fn health(State(state): State<AppState>) -> &'static str {
     "ok"
 }
 
-async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(handle_socket)
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-async fn handle_socket(mut socket: WebSocket) {
+async fn handle_socket(mut socket: WebSocket, state: AppState) {
     use axum::extract::ws::Message;
 
     while let Some(Ok(msg)) = socket.recv().await {
         if let Message::Text(text) = &msg {
-            println!("cliente: {text}");
-        }
-        let response = match &msg {
-            Message::Text(text) if text.trim() == "health" => Message::Text("ok".into()),
-            other => other.clone(),
-        };
-        if socket.send(response).await.is_err() {
-            break;
+            let resp = crate::routes::dispatcher::dispatch(text, &state).await;
+            let Ok(json) = serde_json::to_string(&resp) else {
+                eprintln!("error serializando respuesta");
+                continue;
+            };
+            if socket.send(Message::Text(json.into())).await.is_err() {
+                break;
+            }
         }
     }
 }

@@ -3,3 +3,5 @@ pub mod models;
 pub mod error;
 pub mod app;
 pub mod routes;
+pub mod controller;
+pub mod security;
