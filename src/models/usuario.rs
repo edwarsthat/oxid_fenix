@@ -8,6 +8,7 @@ pub struct Usuario {
     pub nombre: String,
     pub apellido: String,
     pub email: String,
+    pub usuario: String,
     pub password_hash: String,
     pub cargo_id: Uuid,
     pub activo: bool,

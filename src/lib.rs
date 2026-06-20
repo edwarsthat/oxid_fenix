@@ -5,3 +5,4 @@ pub mod app;
 pub mod routes;
 pub mod controller;
 pub mod security;
+pub mod seeds;
