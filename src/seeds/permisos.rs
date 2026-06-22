@@ -4,7 +4,7 @@ use sqlx::PgPool;
 use crate::seeds::error::SeedError;
 
 /// Acciones CRUD estándar que aplican a (casi) todos los módulos.
-const ACCIONES: &[&str] = &["read", "write", "update", "delete"];
+const ACCIONES: &[&str] = &["add", "read", "write", "update", "delete"];
 
 /// Módulos del sistema. Agregar uno nuevo = una línea aquí.
 const MODULOS: &[&str] = &[

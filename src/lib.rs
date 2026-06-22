@@ -6,3 +6,4 @@ pub mod routes;
 pub mod controller;
 pub mod security;
 pub mod seeds;
+pub mod sessions;
