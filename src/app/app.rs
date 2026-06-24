@@ -1,13 +1,12 @@
 use axum::{
-    Router,
-    extract::{
+    Router, extract::{
         State,
         ws::{WebSocket, WebSocketUpgrade},
-    },
-    response::IntoResponse,
-    routing::get,
+    }, response::IntoResponse, routing::{get, post},
 };
 use sqlx::PgPool;
+
+use crate::controller::sistema::auth::login;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -17,6 +16,7 @@ pub struct AppState {
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
+        .route("/login", post(login))
         .route("/ws", get(ws_handler))
         .with_state(state)
 }
