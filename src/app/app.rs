@@ -6,11 +6,12 @@ use axum::{
 };
 use sqlx::PgPool;
 
-use crate::controller::sistema::auth::login;
+use crate::{controller::sistema::auth::login, sessions::memory::SessionStore};
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
+    pub sessions: SessionStore
 }
 
 pub fn build_router(state: AppState) -> Router {

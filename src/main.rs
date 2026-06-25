@@ -1,4 +1,9 @@
-use oxid_fenix::{app::app::{AppState, build_router}, db::postgres::connect, error::AppError};
+use oxid_fenix::{
+    app::app::{AppState, build_router}, 
+    db::postgres::connect, 
+    error::AppError, 
+    sessions::memory::SessionStore
+};
 
 
 #[tokio::main]
@@ -12,7 +17,8 @@ async fn main() {
 async fn run() -> Result<(), AppError>{
     dotenvy::dotenv().ok();
     let pool = connect().await?;
-    let state = AppState { pool };
+    let sessions = SessionStore::new();
+    let state = AppState { pool, sessions };
     let app = build_router(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
