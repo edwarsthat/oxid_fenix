@@ -18,3 +18,21 @@ pub fn verificar(password: &str, hash_guardado: &str) -> Result<bool,  argon2::p
         Err(e) => Err(e)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hash_and_verify_coninciden(){
+        let hash = hashear("secreta123").unwrap();
+        assert!(verificar("secreta123", &hash).unwrap());
+    }
+
+    #[test]
+    fn password_incorrect() {
+        let hash = hashear("secreta123").unwrap();
+        assert!(!verificar("otra", &hash).unwrap());
+        
+    }
+}
