@@ -24,3 +24,51 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
         _ => WsResponse::error(ctx.id, 404, "área desconocida"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sessions::memory::SessionStore;
+    use sqlx::PgPool;
+
+    fn state_de_prueba() -> AppState {
+        let pool = PgPool::connect_lazy("postgres://user:pass@localhost/db").unwrap();
+        AppState {
+            pool,
+            sessions: SessionStore::new()
+        }
+    }
+
+    #[tokio::test]
+    async fn dispatch_json_invalido_devuelve_400(){
+        let state = state_de_prueba();
+
+        let resp = dispatch("no soy json", &state).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "JSON inválido");
+    }
+
+#[tokio::test]
+    async fn dispatch_area_desconocida_devuelve_404() {
+        let state = state_de_prueba();
+        let raw = r#"{"id":"id-1","action":"otraarea::algo"}"#;
+
+        let resp = dispatch(raw, &state).await;
+
+        assert_eq!(resp.id, "id-1");
+        assert_eq!(resp.status, 404);
+        assert_eq!(resp.message, "área desconocida");
+    }
+
+    #[tokio::test]
+    async fn dispatch_sistema_auth_usuario_listar_devuelve_ok() {
+        let state = state_de_prueba();
+        let raw = r#"{"id":"id-2","action":"sistema::auth::usuario::listar"}"#;
+
+        let resp = dispatch(raw, &state).await;
+
+        assert_eq!(resp.id, "id-2");
+        assert_eq!(resp.status, 200);
+    }
+}

@@ -9,8 +9,7 @@ const ACCIONES: &[&str] = &["add", "read", "write", "update", "delete"];
 /// Módulos del sistema. Agregar uno nuevo = una línea aquí.
 const MODULOS: &[&str] = &[
     "usuarios",
-    // "productos",
-    // "cargos",
+    "cargos",
 ];
 
 /// Siembra el producto módulos × acciones. Idempotente.
