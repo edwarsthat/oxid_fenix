@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::app::AppState;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct WsRequest {
     pub id: String,
     pub action: String,
@@ -10,7 +10,7 @@ pub struct WsRequest {
     pub payload: serde_json::Value,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct WsResponse {
     pub id: String,
     pub status: i32,

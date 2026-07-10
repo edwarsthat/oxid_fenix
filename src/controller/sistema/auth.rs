@@ -4,7 +4,6 @@ use chrono::Duration;
 use crate::{
     app::{app::AppState, error::ApiError},
     routes::protocol::{Ctx, WsResponse},
-    security::password,
     services::sistema::auth,
 };
 
@@ -14,8 +13,6 @@ pub struct LoginInput {
     pub password: String,
 }
 
-// Hash argon2 de cualquier contraseña, generado una vez con hashear()
-const DUMMY_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$vBUueYcnLVdWEHGAJXkFjQ$XnRTL9GMlDT4os2lmvc2WJTFH29bXPNZtbJ8n51bw2d";
 
 pub async fn login(
     State(state): State<AppState>,
@@ -23,16 +20,9 @@ pub async fn login(
 ) -> Result<impl IntoResponse, ApiError> {
     let LoginInput { usuario, password } = input;
 
-    let usuario_opt = auth::get_usuario_username(&state.pool, &usuario).await?;
 
-    let hash = usuario_opt
-        .as_ref()
-        .map(|u| u.password_hash.as_str())
-        .unwrap_or(DUMMY_HASH);
-
-    let is_correct = password::verificar(&password, hash).unwrap_or(false);
-
-    let Some(usuario) = usuario_opt.filter(|_| is_correct) else {
+    let Some(usuario) = auth::verificar_credenciales(&state.pool, &usuario, &password).await?
+    else {
         return Err(ApiError::CredencialesInvalidas);
     };
 

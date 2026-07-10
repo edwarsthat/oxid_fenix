@@ -61,11 +61,111 @@ impl SessionStore {
         }
     }
 
-    pub fn eliminar(&self, id:&Uuid) -> Result<(), SessionError> {
+    pub fn eliminar(&self, id: &Uuid) -> Result<(), SessionError> {
         self.inner
             .write()
             .map_err(|_| SessionError::LockEnvenenado)?
             .remove(id);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn crear_genera_sesion_valiida() {
+        let store = SessionStore::new();
+        let usuario_id = Uuid::new_v4();
+        let cargo_id = Uuid::new_v4();
+
+        let id = store
+            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .expect("crear deberia devolver un Uuid");
+
+        let session = store
+            .validar(&id)
+            .expect("validar no deberia fallar")
+            .expect("la sesion deberia existir y no estar expirada");
+
+        assert_eq!(session.usuario_id, usuario_id);
+        assert_eq!(session.cargo_id, cargo_id);
+        assert!(session.expira_en > Utc::now());
+    }
+
+    #[test]
+    fn crear_session_expirada() {
+        let store = SessionStore::new();
+        let usuario_id = Uuid::new_v4();
+        let cargo_id = Uuid::new_v4();
+
+        let id = store
+            .crear(usuario_id, cargo_id, Duration::seconds(-1))
+            .unwrap();
+
+        let session = store.validar(&id).expect("validar no deberia fallar");
+
+        assert!(session.is_none());
+    }
+
+    #[test]
+    fn eliminar_sesion() {
+        let store = SessionStore::new();
+        let usuario_id = Uuid::new_v4();
+        let cargo_id = Uuid::new_v4();
+
+        let id = store
+            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .expect("no deberia fallar");
+
+        store.eliminar(&id).expect("Deberia borrar sin problema");
+
+        let session = store.validar(&id).unwrap();
+
+        assert!(session.is_none());
+    }
+
+    #[test]
+    fn validar_id_inexistente() {
+        let store = SessionStore::new();
+        let usuario_id = Uuid::new_v4();
+        let cargo_id = Uuid::new_v4();
+        let wrong_id = Uuid::new_v4();
+
+        store
+            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .unwrap();
+
+        let session = store.validar(&wrong_id).unwrap();
+
+        assert!(session.is_none());
+    }
+
+    #[test]
+    fn eliminar_id_inexistente_no_falla() {
+        let store = SessionStore::new();
+        let id = Uuid::new_v4();
+
+        store
+            .eliminar(&id)
+            .expect("eliminar deberia ser idempotente");
+    }
+
+    #[test]
+    fn clones_comparten_el_mismo_estado(){
+        let store = SessionStore::new();
+        let store2 = store.clone();
+        let usuario_id = Uuid::new_v4();
+        let cargo_id = Uuid::new_v4();
+
+        let id = store
+            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .unwrap();
+        assert!(store2.validar(&id).unwrap().is_some());
+
+        store2.eliminar(&id).unwrap();
+        assert!(store.validar(&id).unwrap().is_none());
     }
 }
