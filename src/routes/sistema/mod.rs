@@ -3,9 +3,9 @@ pub mod auth;
 use crate::routes::protocol::{Ctx, WsResponse};
 
 /// Router del área `sistema`. Reparte por dominio.
-/// resto: "auth::usuario::listar" -> dominio="auth", resto="usuario::listar"
+/// resto: "auth:usuario:listar" -> dominio="auth", resto="usuario:listar"
 pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
-    let (dominio, resto) = match resto.split_once("::") {
+    let (dominio, resto) = match resto.split_once(":") {
         Some(par) => par,
         None => return WsResponse::error(ctx.id, 400, "action inválido"),
     };
@@ -28,13 +28,14 @@ mod tests {
         Ctx {
             state: AppState { pool, sessions: SessionStore::new() },
             id: id.to_string(),
-            payload: serde_json::Value::Null,
+            data: serde_json::Map::new(),
+            token: "token-de-prueba".to_string(),
         }
     }
 
     #[tokio::test]
     async fn route_dominio_auth_delega_correctamente() {
-        let resp = route("auth::usuario::listar", ctx_de_prueba("id-1")).await;
+        let resp = route("auth:usuario:listar", ctx_de_prueba("id-1")).await;
 
         assert_eq!(resp.id, "id-1");
         assert_eq!(resp.status, 200);
@@ -42,7 +43,7 @@ mod tests {
 
     #[tokio::test]
     async fn route_dominio_desconocido_devuelve_404() {
-        let resp = route("otro::algo", ctx_de_prueba("id-2")).await;
+        let resp = route("otro:algo", ctx_de_prueba("id-2")).await;
 
         assert_eq!(resp.id, "id-2");
         assert_eq!(resp.status, 404);

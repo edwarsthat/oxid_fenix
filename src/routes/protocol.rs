@@ -5,9 +5,16 @@ use crate::app::app::AppState;
 #[derive(Deserialize, Debug)]
 pub struct WsRequest {
     pub id: String,
+    pub token: String,
+    pub payload: WsPayload,
+}
+
+#[derive(Deserialize, Debug)]
+
+pub struct WsPayload {
     pub action: String,
-    #[serde(default)]
-    pub payload: serde_json::Value,
+    #[serde(flatten)]
+    pub data: serde_json::Map<String, serde_json::Value>
 }
 
 #[derive(Serialize, Debug)]
@@ -15,6 +22,7 @@ pub struct WsResponse {
     pub id: String,
     pub status: i32,
     pub message: String,
+    #[serde(flatten)]  
     pub data: serde_json::Value,
 }
 
@@ -22,12 +30,15 @@ pub struct WsResponse {
 pub struct WsEvent {
     pub event: String,
     pub data: serde_json::Value,
+    pub token: String,
 }
 
 pub struct Ctx {
     pub state: AppState,
     pub id: String,
-    pub payload: serde_json::Value,
+    pub data:  serde_json::Map<String, serde_json::Value>,
+    pub token: String,
+
 }
 
 impl WsResponse {

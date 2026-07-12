@@ -2,12 +2,12 @@ use crate::controller::sistema::auth as controller;
 use crate::routes::protocol::{Ctx, WsResponse};
 
 /// Router del dominio `auth` (dentro del área `sistema`).
-/// resto: "usuario::listar"
+/// resto: "usuario:listar"
 pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
     println!("[sistema::auth] ruta recibida: '{resto}' (id={})", ctx.id);
 
     match resto {
-        "usuario::listar" => controller::list_usuarios(ctx).await,
+        "usuario:listar" => controller::list_usuarios(ctx).await,
         _ => {
             tracing::warn!("[sistema::auth] !! acción desconocida: '{resto}'");
             WsResponse::error(ctx.id, 404, "Acción desconocida")
@@ -29,13 +29,14 @@ mod tests {
         Ctx {
             state: AppState { pool, sessions: SessionStore::new() },
             id: id.to_string(),
-            payload: serde_json::Value::Null,
+            data: serde_json::Map::new(),
+            token: "token-de-prueba".to_string(),
         }
     }
 
     #[tokio::test]
     async fn route_usuario_listar_devuelve_ok() {
-        let resp = route("usuario::listar", ctx_de_prueba("id-1")).await;
+        let resp = route("usuario:listar", ctx_de_prueba("id-1")).await;
         assert_eq!(resp.id, "id-1");
         assert_eq!(resp.status, 200);
     }

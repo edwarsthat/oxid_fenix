@@ -8,7 +8,7 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
         Err(err) => return err
     };
 
-    let (area, resto) = match partir_segmento(&req.id, &req.action) {
+    let (area, resto) = match partir_segmento(&req.id, &req.payload.action) {
         Ok((area, resto)) => (area, resto),
         Err(err) => return err
     };
@@ -16,7 +16,8 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
     let ctx = Ctx {
         state: state.clone(),
         id: req.id,
-        payload: req.payload,
+        data: req.payload.data,
+        token: req.token,
     };
 
     match area {
