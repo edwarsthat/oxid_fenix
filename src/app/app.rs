@@ -77,6 +77,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     while let Some(Ok(msg)) = socket.recv().await {
         if let Message::Text(text) = &msg {
             println!("[ws] mensaje del cliente: {text}");
+            
             let resp = crate::routes::dispatcher::dispatch(text, &state).await;
             let Ok(json) = serde_json::to_string(&resp) else {
                 eprintln!("error serializando respuesta");
@@ -94,12 +95,18 @@ mod tests {
     use super::*;
     use axum::http::{HeaderValue, header::AUTHORIZATION};
     use chrono::Duration;
+    use std::collections::HashSet;
+    use std::sync::Arc;
     use uuid::Uuid;
 
     fn headers_con_auth(valor: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, HeaderValue::from_str(valor).unwrap());
         headers
+    }
+
+    fn permisos(items: &[&str]) -> Arc<HashSet<String>> {
+        Arc::new(items.iter().map(|p| p.to_string()).collect())
     }
 
     // ── extraer_token ───────────────────────────────
@@ -143,7 +150,12 @@ mod tests {
         // una sesión vencida se trata igual que un token inválido
         let sessions = SessionStore::new();
         let id = sessions
-            .crear(Uuid::new_v4(), Uuid::new_v4(), Duration::seconds(-1))
+            .crear(
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                Duration::seconds(-1),
+                permisos(&["usuarios.leer"]),
+            )
             .unwrap();
 
         let err = resolver_session(&id.to_string(), &sessions).unwrap_err();
@@ -156,13 +168,15 @@ mod tests {
         let sessions = SessionStore::new();
         let usuario_id = Uuid::new_v4();
         let cargo_id = Uuid::new_v4();
+        let permisos = permisos(&["usuarios.leer"]);
         let id = sessions
-            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .crear(usuario_id, cargo_id, Duration::hours(1), permisos.clone())
             .unwrap();
 
         let session = resolver_session(&id.to_string(), &sessions).unwrap();
 
         assert_eq!(session.usuario_id, usuario_id);
         assert_eq!(session.cargo_id, cargo_id);
+        assert_eq!(session.permisos, permisos);
     }
 }

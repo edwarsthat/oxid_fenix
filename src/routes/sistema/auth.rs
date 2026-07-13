@@ -23,6 +23,8 @@ mod tests {
         sessions::memory::SessionStore
     };
     use sqlx::PgPool;
+    use std::collections::HashSet;
+    use std::sync::Arc;
 
     fn ctx_de_prueba(id: &str) -> Ctx {
         let pool = PgPool::connect_lazy("postgres://user:pass@localhost/db").unwrap();
@@ -31,6 +33,7 @@ mod tests {
             id: id.to_string(),
             data: serde_json::Map::new(),
             token: "token-de-prueba".to_string(),
+            permisos: Arc::new(HashSet::new()),
         }
     }
 

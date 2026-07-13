@@ -1,3 +1,5 @@
+use std::{collections::HashSet, sync::Arc};
+
 use serde::{Deserialize, Serialize};
 
 use crate::app::app::AppState;
@@ -38,6 +40,7 @@ pub struct Ctx {
     pub id: String,
     pub data:  serde_json::Map<String, serde_json::Value>,
     pub token: String,
+    pub permisos: Arc<HashSet<String>>
 
 }
 

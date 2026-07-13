@@ -1,3 +1,5 @@
+use std::{collections::HashSet, sync::Arc};
+
 use axum::{Json, extract::State, response::IntoResponse};
 use chrono::Duration;
 
@@ -27,10 +29,11 @@ pub async fn login(
     };
 
     let permisos = auth::get_permisos_por_cargo(&state.pool, usuario.cargo_id).await?;
+    let permisos_map: Arc<HashSet<String>> = Arc::new(permisos.clone().into_iter().collect());
 
     let session = state
         .sessions
-        .crear(usuario.id, usuario.cargo_id, Duration::minutes(480))?;
+        .crear(usuario.id, usuario.cargo_id, Duration::minutes(480), permisos_map)?;
 
     Ok(Json(serde_json::json!({ "status": "ok", "session_id": session, "permisos": permisos })))
 }

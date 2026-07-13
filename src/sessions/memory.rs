@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use chrono::{DateTime, Duration, Utc};
@@ -11,11 +11,13 @@ pub struct Session {
     pub usuario_id: Uuid,
     pub cargo_id: Uuid,
     pub expira_en: DateTime<Utc>,
+    pub permisos: Arc<HashSet<String>>
 }
 
 #[derive(Clone, Default)]
 pub struct SessionStore {
     inner: Arc<RwLock<HashMap<Uuid, Session>>>,
+
 }
 
 impl SessionStore {
@@ -28,12 +30,14 @@ impl SessionStore {
         usuario_id: Uuid,
         cargo_id: Uuid,
         duracion: Duration,
+        permisos: Arc<HashSet<String>>,
     ) -> Result<Uuid, SessionError> {
         let id = Uuid::new_v4();
         let session = Session {
             usuario_id,
             cargo_id,
             expira_en: Utc::now() + duracion,
+            permisos,
         };
 
         let mut mapa = self
@@ -75,14 +79,19 @@ mod tests {
 
     use super::*;
 
+    fn permisos(items: &[&str]) -> Arc<HashSet<String>> {
+        Arc::new(items.iter().map(|p| p.to_string()).collect())
+    }
+
     #[test]
     fn crear_genera_sesion_valiida() {
         let store = SessionStore::new();
         let usuario_id = Uuid::new_v4();
         let cargo_id = Uuid::new_v4();
+        let permisos = permisos(&["usuarios.leer", "usuarios.crear"]);
 
         let id = store
-            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .crear(usuario_id, cargo_id, Duration::hours(1), permisos.clone())
             .expect("crear deberia devolver un Uuid");
 
         let session = store
@@ -92,6 +101,7 @@ mod tests {
 
         assert_eq!(session.usuario_id, usuario_id);
         assert_eq!(session.cargo_id, cargo_id);
+        assert_eq!(session.permisos, permisos);
         assert!(session.expira_en > Utc::now());
     }
 
@@ -102,7 +112,12 @@ mod tests {
         let cargo_id = Uuid::new_v4();
 
         let id = store
-            .crear(usuario_id, cargo_id, Duration::seconds(-1))
+            .crear(
+                usuario_id,
+                cargo_id,
+                Duration::seconds(-1),
+                permisos(&["usuarios.leer"]),
+            )
             .unwrap();
 
         let session = store.validar(&id).expect("validar no deberia fallar");
@@ -117,7 +132,12 @@ mod tests {
         let cargo_id = Uuid::new_v4();
 
         let id = store
-            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .crear(
+                usuario_id,
+                cargo_id,
+                Duration::hours(1),
+                permisos(&["usuarios.leer"]),
+            )
             .expect("no deberia fallar");
 
         store.eliminar(&id).expect("Deberia borrar sin problema");
@@ -135,7 +155,12 @@ mod tests {
         let wrong_id = Uuid::new_v4();
 
         store
-            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .crear(
+                usuario_id,
+                cargo_id,
+                Duration::hours(1),
+                permisos(&["usuarios.leer"]),
+            )
             .unwrap();
 
         let session = store.validar(&wrong_id).unwrap();
@@ -161,7 +186,12 @@ mod tests {
         let cargo_id = Uuid::new_v4();
 
         let id = store
-            .crear(usuario_id, cargo_id, Duration::hours(1))
+            .crear(
+                usuario_id,
+                cargo_id,
+                Duration::hours(1),
+                permisos(&["usuarios.leer"]),
+            )
             .unwrap();
         assert!(store2.validar(&id).unwrap().is_some());
 

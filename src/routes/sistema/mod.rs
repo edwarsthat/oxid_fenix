@@ -1,6 +1,6 @@
 pub mod auth;
 
-use crate::routes::protocol::{Ctx, WsResponse};
+use crate::routes::{protocol::{Ctx, WsResponse}};
 
 /// Router del área `sistema`. Reparte por dominio.
 /// resto: "auth:usuario:listar" -> dominio="auth", resto="usuario:listar"
@@ -21,6 +21,8 @@ mod tests {
     use super::*;
     use crate::{app::app::AppState, sessions::memory::SessionStore};
     use sqlx::PgPool;
+    use std::collections::HashSet;
+    use std::sync::Arc;
 
     fn ctx_de_prueba(id: &str) -> Ctx {
         // connect_lazy no abre conexión real: sirve porque estas rutas no tocan el pool
@@ -30,6 +32,7 @@ mod tests {
             id: id.to_string(),
             data: serde_json::Map::new(),
             token: "token-de-prueba".to_string(),
+            permisos: Arc::new(HashSet::new()),
         }
     }
 
