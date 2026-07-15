@@ -45,7 +45,7 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
 
     match area {
         "sistema" => crate::routes::sistema::route(resto, ctx).await,
-        "administracion" => crate::routes::administracion::cargos::route(resto, ctx).await,
+        "administracion" => crate::routes::administracion::route(resto, ctx).await,
         _ => WsResponse::error(ctx.id, 404, "área desconocida"),
     }
 }

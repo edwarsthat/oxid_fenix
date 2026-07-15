@@ -1,7 +1,5 @@
 use sqlx::PgPool;
-
 use crate::{models::cargo::Cargo, services::error::ServiceError};
-
 
 pub async fn get_cargos(
     pool: &PgPool,
@@ -14,4 +12,25 @@ pub async fn get_cargos(
     .await?;
 
     Ok(cargos)
+}
+
+pub async fn create_cargo(
+    pool: &PgPool,
+    nombre: &str,
+    descripcion: &str,
+) -> Result<Cargo, ServiceError> {
+    let cargo = sqlx::query_as!(
+        Cargo,
+        r#"
+        INSERT INTO cargos (nombre, descripcion)
+        VALUES ($1, $2)
+        RETURNING id, nombre, descripcion, creado_en
+        "#,
+        nombre,
+        descripcion
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(cargo)
 }
