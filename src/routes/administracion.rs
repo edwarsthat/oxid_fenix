@@ -7,16 +7,28 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
     match resto {
         //Cargos
         "cargos:read" => {
-            if !ctx.permisos.contains(resto) {
+            if !ctx.permisos.contains("cargos:read") {
                 return WsResponse::error(ctx.id, 403, "sin permiso");
             }
             controller::cargo::cargos_read(ctx).await
         }
-        "cargos:create" => {
-            if !ctx.permisos.contains(resto) {
+        "cargos:permisos:read" => {
+            if !ctx.permisos.contains("cargos:read") {
                 return WsResponse::error(ctx.id, 403, "sin permiso");
             }
-            controller::cargo::cargos_read(ctx).await
+            controller::cargo::cargo_permisos_read(ctx).await
+        }
+        "cargos:add" => {
+            if !ctx.permisos.contains("cargos:add") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::cargo::cargos_add(ctx).await
+        }
+        "cargos:update" => {
+            if !ctx.permisos.contains("cargos:update") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::cargo::cargos_update(ctx).await
         }
         "permisos:read" => {
             if !ctx.permisos.contains(resto) {

@@ -23,6 +23,7 @@ mod tests {
         sessions::memory::SessionStore
     };
     use sqlx::PgPool;
+    use uuid::Uuid;
     use std::collections::HashSet;
     use std::sync::Arc;
 
@@ -34,6 +35,7 @@ mod tests {
             data: serde_json::Map::new(),
             token: "token-de-prueba".to_string(),
             permisos: Arc::new(HashSet::new()),
+            user_id: Uuid::new_v4()
         }
     }
 

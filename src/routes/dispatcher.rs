@@ -29,9 +29,9 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
     };
 
     //revisa permisos y autentificacion
-    let permisos = match sesion {
-        Some(s) => s.permisos, // aquí sí tienes Session, sin clone
-        None if area == "sistema" => Arc::new(HashSet::new()),
+    let (permisos, actor_id) = match sesion {
+        Some(s) => (s.permisos, s.usuario_id),
+        None if area == "sistema" => (Arc::new(HashSet::new()), Uuid::nil()),
         None => return WsResponse::error(req.id, 401, "no autenticado"),
     };
 
@@ -41,6 +41,7 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
         data: req.payload.data,
         token: req.token,
         permisos: permisos,
+        user_id: actor_id,
     };
 
     match area {
@@ -154,5 +155,4 @@ mod tests {
         assert_eq!(resp.status, 401);
         assert_eq!(resp.message, "no autenticado");
     }
-
 }

@@ -1,6 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::app::app::AppState;
 
@@ -38,6 +39,7 @@ pub struct WsEvent {
 pub struct Ctx {
     pub state: AppState,
     pub id: String,
+    pub user_id: Uuid,
     pub data:  serde_json::Map<String, serde_json::Value>,
     pub token: String,
     pub permisos: Arc<HashSet<String>>
@@ -60,6 +62,11 @@ impl WsResponse {
             message: msg.to_string(),
             data: serde_json::Value::Null,
         }
+    }
+
+    pub fn internal_error(id: impl Into<String>, ctx: &str, err: impl std::fmt::Display) -> Self {
+        tracing::error!("[{ctx}] {err}");
+        Self::error(id, 500, "error interno")
     }
 }
 
