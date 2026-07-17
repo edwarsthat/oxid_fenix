@@ -24,12 +24,13 @@ mod tests {
     use uuid::Uuid;
     use std::collections::HashSet;
     use std::sync::Arc;
+    use tokio::sync::broadcast;
 
     fn ctx_de_prueba(id: &str) -> Ctx {
         // connect_lazy no abre conexión real: sirve porque estas rutas no tocan el pool
         let pool = PgPool::connect_lazy("postgres://user:pass@localhost/db").unwrap();
         Ctx {
-            state: AppState { pool, sessions: SessionStore::new() },
+            state: AppState { pool, sessions: SessionStore::new(), eventos: broadcast::Sender::new(100) },
             id: id.to_string(),
             data: serde_json::Map::new(),
             token: "token-de-prueba".to_string(),

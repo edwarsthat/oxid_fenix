@@ -57,6 +57,7 @@ mod tests {
     use crate::sessions::memory::SessionStore;
     use chrono::Duration;
     use sqlx::PgPool;
+    use tokio::sync::broadcast;
     use std::collections::HashSet;
     use std::sync::Arc;
 
@@ -69,6 +70,7 @@ mod tests {
         AppState {
             pool,
             sessions: SessionStore::new(),
+            eventos: broadcast::Sender::new(100),
         }
     }
 

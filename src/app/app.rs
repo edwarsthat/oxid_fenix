@@ -9,6 +9,7 @@ use axum::{
     routing::{get, post},
 };
 use sqlx::PgPool;
+use tokio::sync::broadcast;
 
 use crate::{
     app::error::WsError,
@@ -20,6 +21,7 @@ use crate::{
 pub struct AppState {
     pub pool: PgPool,
     pub sessions: SessionStore,
+    pub eventos: broadcast::Sender<String>,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -46,9 +48,9 @@ async fn ws_handler(
 
     let session = match resolver_session(&token, &state.sessions) {
         Ok(session) => session,
-        Err(err) => return Err(err)
+        Err(err) => return Err(err),
     };
-    
+
     Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, session)))
 }
 
@@ -66,25 +68,47 @@ fn resolver_session(token: &str, sessions: &SessionStore) -> Result<Session, WsE
     Ok(session)
 }
 
-async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session) {
+async fn handle_socket(socket: WebSocket, state: AppState, session: Session) {
     println!(
         "[ws] conexión establecida para usuario {} (cargo {})",
         session.usuario_id, session.cargo_id
     );
 
     use axum::extract::ws::Message;
+    use futures::{SinkExt, StreamExt};
 
-    while let Some(Ok(msg)) = socket.recv().await {
-        if let Message::Text(text) = &msg {
-            println!("[ws] mensaje del cliente: {text}");
-            
-            let resp = crate::routes::dispatcher::dispatch(text, &state).await;
-            let Ok(json) = serde_json::to_string(&resp) else {
-                eprintln!("error serializando respuesta");
-                continue;
-            };
-            if socket.send(Message::Text(json.into())).await.is_err() {
-                break;
+    let (mut sender, mut receiver) = socket.split();
+    let mut eventos_rx = state.eventos.subscribe();
+
+    loop {
+        tokio::select! {
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                         let resp = crate::routes::dispatcher::dispatch(&text, &state).await;
+                         let Ok(json) = serde_json::to_string(&resp) else { continue };
+                         if sender.send(Message::Text(json.into())).await.is_err() { break; }
+                    }
+                    Some(Ok(_)) => {}
+                    Some(Err(e)) => {
+                        eprintln!("Error leyendo del socket: {e}");
+                        break;
+                    }
+                    None => {
+                        // El stream terminó, el cliente cerró la conexión
+                        break;
+                    }
+                }
+            }
+
+            evento = eventos_rx.recv() => {
+                match evento {
+                    Ok(json) => {
+                        if sender.send(Message::Text(json.into())).await.is_err() { break; }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => break,
+                }
             }
         }
     }

@@ -13,11 +13,10 @@ pub struct WsRequest {
 }
 
 #[derive(Deserialize, Debug)]
-
 pub struct WsPayload {
     pub action: String,
     #[serde(flatten)]
-    pub data: serde_json::Map<String, serde_json::Value>
+    pub data: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Serialize, Debug)]
@@ -25,25 +24,37 @@ pub struct WsResponse {
     pub id: String,
     pub status: i32,
     pub message: String,
-    #[serde(flatten)]  
+    #[serde(flatten)]
     pub data: serde_json::Value,
 }
 
 #[derive(Serialize)]
 pub struct WsEvent {
     pub event: String,
+    pub action: String,
     pub data: serde_json::Value,
-    pub token: String,
 }
 
 pub struct Ctx {
     pub state: AppState,
     pub id: String,
     pub user_id: Uuid,
-    pub data:  serde_json::Map<String, serde_json::Value>,
+    pub data: serde_json::Map<String, serde_json::Value>,
     pub token: String,
-    pub permisos: Arc<HashSet<String>>
+    pub permisos: Arc<HashSet<String>>,
+}
 
+impl Ctx {
+    pub fn emit(&self, event: &str, action: &str, data: serde_json::Value) {
+        let evento = WsEvent {
+            event: event.into(),
+            action: action.into(),
+            data,
+        };
+        if let Ok(json) = serde_json::to_string(&evento) {
+            let _ = self.state.eventos.send(json);
+        }
+    }
 }
 
 impl WsResponse {
@@ -69,4 +80,3 @@ impl WsResponse {
         Self::error(id, 500, "error interno")
     }
 }
-

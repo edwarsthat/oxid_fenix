@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    routes::protocol::{Ctx, WsResponse},
+    routes::protocol::{Ctx, WsEvent, WsResponse},
     services::{
         administracion::{
             cargos::{create_cargo, get_cargos, update_cargo},
@@ -92,6 +92,7 @@ pub async fn cargos_add(ctx: Ctx) -> WsResponse {
         return WsResponse::internal_error(ctx.id, "cargos_add", err);
     }
 
+    ctx.emit("cargos", "add", serde_json::json!({ "data": new_cargo }));
     WsResponse::ok(ctx.id, serde_json::json!({ "data": new_cargo }))
 }
 
@@ -159,6 +160,8 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
     if let Err(err) = tx.commit().await {
         return WsResponse::internal_error(ctx.id, "cargos_update", err);
     }
+
+    ctx.emit("cargos", "update", serde_json::json!({ "data": update_cargo }));
 
     WsResponse::ok(ctx.id, serde_json::json!({}))
 }
