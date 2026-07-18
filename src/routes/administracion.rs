@@ -30,6 +30,12 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::cargo::cargos_update(ctx).await
         }
+        "cargos:delete" => {
+            if !ctx.permisos.contains("cargos:delete") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::cargo::cargos_delete(ctx).await
+        }
         "permisos:read" => {
             if !ctx.permisos.contains(resto) {
                 return WsResponse::error(ctx.id, 403, "sin permiso");

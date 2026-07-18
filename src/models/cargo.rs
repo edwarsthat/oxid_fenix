@@ -10,4 +10,5 @@ pub struct Cargo {
     pub nombre: String,
     pub descripcion: Option<String>,
     pub creado_en: DateTime<Utc>,
+    pub activo: bool
 }

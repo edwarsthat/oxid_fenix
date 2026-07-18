@@ -4,7 +4,7 @@ use crate::{
     routes::protocol::{Ctx, WsResponse},
     services::{
         administracion::{
-            cargos::{create_cargo, get_cargos, update_cargo},
+            cargos::{create_cargo, get_cargos, soft_delete_cargo, update_cargo},
             cargos_permisos::{add_cargo_permiso, get_permisos_de_cargo, sync_cargo_permisos},
         },
         logs::audit_logs::create_audit_log,
@@ -161,7 +161,58 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
         return WsResponse::internal_error(ctx.id, "cargos_update", err);
     }
 
-    ctx.emit("cargos", "update", serde_json::json!({ "data": update_cargo }));
+    ctx.emit(
+        "cargos",
+        "update",
+        serde_json::json!({ "data": update_cargo }),
+    );
+
+    WsResponse::ok(ctx.id, serde_json::json!({}))
+}
+
+pub async fn cargos_delete(ctx: Ctx) -> WsResponse {
+    let cargo_id = match ctx.data.get("cargo_id").and_then(|v| v.as_str()) {
+        Some(cargo_id) => cargo_id,
+        None => return WsResponse::error(ctx.id, 400, "Falta el cargo"),
+    };
+
+    let cargo_id: Uuid = match Uuid::parse_str(cargo_id) {
+        Ok(id) => id,
+        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id no valido"),
+    };
+
+    let mut tx = match ctx.state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => return WsResponse::internal_error(ctx.id, "cargos_delete", err),
+    };
+
+    if let Err(err) = soft_delete_cargo(&mut *tx, cargo_id).await {
+        return WsResponse::internal_error(ctx.id, "cargos_delete", err);
+    }
+
+    if let Err(err) = create_audit_log(
+        &mut *tx,
+        "cargo",
+        cargo_id,
+        "delete",
+        ctx.user_id,
+        None,
+        Some(serde_json::json!({ "cargo_id": cargo_id, "active": false })),
+    )
+    .await
+    {
+        return WsResponse::internal_error(ctx.id, "cargos_delete", err);
+    }
+
+    if let Err(err) = tx.commit().await {
+        return WsResponse::internal_error(ctx.id, "cargos_delete", err);
+    }
+
+    ctx.emit(
+        "cargos",
+        "delete",
+        serde_json::json!({ "cargo_id": cargo_id }),
+    );
 
     WsResponse::ok(ctx.id, serde_json::json!({}))
 }
