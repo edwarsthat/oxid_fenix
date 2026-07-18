@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use crate::{
-    routes::protocol::{Ctx, WsEvent, WsResponse},
+    routes::protocol::{Ctx, WsResponse},
     services::{
         administracion::{
             cargos::{create_cargo, get_cargos, update_cargo},
