@@ -89,3 +89,58 @@ impl WsResponse {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_service_error_not_found_devuelve_404() {
+        let resp = WsResponse::from_service_error(
+            "id-1",
+            "ctx",
+            ServiceError::NotFound("cargo no encontrado".into()),
+        );
+
+        assert_eq!(resp.id, "id-1");
+        assert_eq!(resp.status, 404);
+        assert_eq!(resp.message, "cargo no encontrado");
+    }
+
+    #[test]
+    fn from_service_error_conflict_devuelve_409() {
+        let resp = WsResponse::from_service_error(
+            "id-2",
+            "ctx",
+            ServiceError::Conflict("ya existe un cargo con ese nombre".into()),
+        );
+
+        assert_eq!(resp.status, 409);
+        assert_eq!(resp.message, "ya existe un cargo con ese nombre");
+    }
+
+    #[test]
+    fn from_service_error_bad_request_devuelve_400() {
+        let resp = WsResponse::from_service_error(
+            "id-3",
+            "ctx",
+            ServiceError::BadRequest("permiso invalido".into()),
+        );
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "permiso invalido");
+    }
+
+    #[test]
+    fn from_service_error_database_cae_en_error_interno() {
+        // un error de base de datos "crudo" no debe filtrar detalles al cliente
+        let resp = WsResponse::from_service_error(
+            "id-4",
+            "ctx",
+            ServiceError::Database(sqlx::Error::RowNotFound),
+        );
+
+        assert_eq!(resp.status, 500);
+        assert_eq!(resp.message, "error interno");
+    }
+}

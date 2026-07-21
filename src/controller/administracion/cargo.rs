@@ -148,7 +148,7 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
     if let Err(err) = create_audit_log(
         &mut *tx,
         "cargo",
-        updated_cargo.id, 
+        updated_cargo.id,
         "update",
         ctx.user_id,
         None,
@@ -215,4 +215,181 @@ pub async fn cargos_delete(ctx: Ctx) -> WsResponse {
     );
 
     WsResponse::ok(ctx.id, serde_json::json!({}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::app::AppState;
+    use crate::sessions::memory::SessionStore;
+    use serde_json::json;
+    use sqlx::PgPool;
+    use std::collections::HashSet;
+    use std::sync::Arc;
+    use tokio::sync::broadcast;
+
+    fn ctx_de_prueba(data: serde_json::Value) -> Ctx {
+        // connect_lazy no abre conexión real: alcanza para las validaciones,
+        // que retornan antes de tocar el pool.
+        let pool = PgPool::connect_lazy("postgres://user:pass@localhost/db").unwrap();
+        let state = AppState {
+            pool,
+            sessions: SessionStore::new(),
+            eventos: broadcast::Sender::new(100),
+        };
+
+        Ctx {
+            state,
+            id: "test-id".into(),
+            user_id: Uuid::new_v4(),
+            data: data.as_object().cloned().unwrap_or_default(),
+            token: "token".into(),
+            permisos: Arc::new(HashSet::new()),
+        }
+    }
+
+    // ── cargo_permisos_read ─────────────────────────────
+
+    #[tokio::test]
+    async fn cargo_permisos_read_sin_cargo_id_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({}));
+
+        let resp = cargo_permisos_read(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "Falta el cargo");
+    }
+
+    #[tokio::test]
+    async fn cargo_permisos_read_con_cargo_id_invalido_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({ "cargo_id": "no-es-un-uuid" }));
+
+        let resp = cargo_permisos_read(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "cargo_id no valido");
+    }
+
+    // ── cargos_add ───────────────────────────────────────
+
+    #[tokio::test]
+    async fn cargos_add_sin_nombre_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({
+            "descripcion": "desc",
+            "permisos": ["11111111-1111-1111-1111-111111111111"]
+        }));
+
+        let resp = cargos_add(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "Error nombre no valido");
+    }
+
+    #[tokio::test]
+    async fn cargos_add_con_nombre_vacio_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({
+            "nombre": "   ",
+            "descripcion": "desc",
+            "permisos": ["11111111-1111-1111-1111-111111111111"]
+        }));
+
+        let resp = cargos_add(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "Error nombre no valido");
+    }
+
+    #[tokio::test]
+    async fn cargos_add_sin_descripcion_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({
+            "nombre": "Gerente",
+            "permisos": ["11111111-1111-1111-1111-111111111111"]
+        }));
+
+        let resp = cargos_add(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "Error descripcion no valida");
+    }
+
+    #[tokio::test]
+    async fn cargos_add_sin_permisos_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({
+            "nombre": "Gerente",
+            "descripcion": "desc",
+            "permisos": []
+        }));
+
+        let resp = cargos_add(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "Error permisos no validos");
+    }
+
+    #[tokio::test]
+    async fn cargos_add_con_permiso_no_string_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({
+            "nombre": "Gerente",
+            "descripcion": "desc",
+            "permisos": [123]
+        }));
+
+        let resp = cargos_add(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "Error permisos no validos");
+    }
+
+    // ── cargos_update ────────────────────────────────────
+
+    #[tokio::test]
+    async fn cargos_update_sin_cargo_id_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({
+            "nombre": "Gerente",
+            "descripcion": "desc",
+            "permisos": ["11111111-1111-1111-1111-111111111111"]
+        }));
+
+        let resp = cargos_update(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "Falta el cargo");
+    }
+
+    #[tokio::test]
+    async fn cargos_update_con_cargo_id_invalido_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({
+            "nombre": "Gerente",
+            "descripcion": "desc",
+            "permisos": ["11111111-1111-1111-1111-111111111111"],
+            "cargo_id": "no-es-un-uuid"
+        }));
+
+        let resp = cargos_update(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "cargo_id no valido");
+    }
+
+    // ── cargos_delete ────────────────────────────────────
+
+    #[tokio::test]
+    async fn cargos_delete_sin_cargo_id_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({}));
+
+        let resp = cargos_delete(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "Falta el cargo");
+    }
+
+    #[tokio::test]
+    async fn cargos_delete_con_cargo_id_invalido_devuelve_400() {
+        let ctx = ctx_de_prueba(json!({ "cargo_id": "no-es-un-uuid" }));
+
+        let resp = cargos_delete(ctx).await;
+
+        assert_eq!(resp.status, 400);
+        assert_eq!(resp.message, "cargo_id no valido");
+    }
 }
