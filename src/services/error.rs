@@ -7,4 +7,12 @@ pub enum ServiceError {
 
     #[error("bad request: {0}")]
     BadRequest(String),
+
+    #[error("no encontrado: {0}")]
+    NotFound(String),
+
+    #[error("conflicto: {0}")]
+    Conflict(String),
 }
+
+

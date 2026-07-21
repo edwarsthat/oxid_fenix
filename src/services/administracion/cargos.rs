@@ -13,6 +13,15 @@ pub async fn get_cargos(pool: &PgPool) -> Result<Vec<Cargo>, ServiceError> {
     Ok(cargos)
 }
 
+fn map_nombre_duplicado(err: sqlx::Error) -> ServiceError {
+    if let sqlx::Error::Database(db_err) = &err {
+        if db_err.code().as_deref() == Some("23505") {
+            return ServiceError::Conflict("ya existe un cargo con ese nombre".into());
+        }
+    }
+    ServiceError::from(err)
+}
+
 pub async fn create_cargo<'e, E>(
     executor: E,
     nombre: &str,
@@ -32,7 +41,8 @@ where
         descripcion
     )
     .fetch_one(executor)
-    .await?;
+    .await
+    .map_err(map_nombre_duplicado)?;
 
     Ok(cargo)
 }
@@ -59,7 +69,11 @@ where
         cargo_id
     )
     .fetch_one(executor)
-    .await?;
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => ServiceError::NotFound("cargo no encontrado".into()),
+        err => map_nombre_duplicado(err),
+    })?;
 
     Ok(cargo)
 }
@@ -78,7 +92,11 @@ where
         cargo_id
     )
     .fetch_one(executor)
-    .await?;
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => ServiceError::NotFound("cargo no encontrado".into()),
+        err => ServiceError::from(err),
+    })?;
 
     Ok(())
 }

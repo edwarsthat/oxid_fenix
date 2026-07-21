@@ -14,7 +14,7 @@ use crate::{
 pub async fn cargos_read(ctx: Ctx) -> WsResponse {
     match get_cargos(&ctx.state.pool).await {
         Ok(cargos) => WsResponse::ok(ctx.id, serde_json::json!({ "data": cargos })),
-        Err(err) => WsResponse::internal_error(ctx.id, "cargos_read", err),
+        Err(err) => WsResponse::from_service_error(ctx.id, "cargos_read", err),
     }
 }
 
@@ -31,7 +31,7 @@ pub async fn cargo_permisos_read(ctx: Ctx) -> WsResponse {
 
     let permisos = match get_permisos_de_cargo(&ctx.state.pool, cargo_id).await {
         Ok(permisos) => permisos,
-        Err(err) => return WsResponse::internal_error(ctx.id, "cargos_read", err),
+        Err(err) => return WsResponse::from_service_error(ctx.id, "cargo_permisos_read", err),
     };
 
     WsResponse::ok(ctx.id, serde_json::json!({ "data": permisos }))
@@ -69,11 +69,11 @@ pub async fn cargos_add(ctx: Ctx) -> WsResponse {
 
     let new_cargo = match create_cargo(&mut *tx, &nombre, &descripcion).await {
         Ok(cargo) => cargo,
-        Err(err) => return WsResponse::internal_error(ctx.id, "cargos_add", err),
+        Err(err) => return WsResponse::from_service_error(ctx.id, "cargos_add", err),
     };
 
     if let Err(err) = add_cargo_permiso(&mut *tx, new_cargo.id, permisos.clone()).await {
-        return WsResponse::internal_error(ctx.id, "cargos_add", err);
+        return WsResponse::from_service_error(ctx.id, "cargos_add", err);
     };
 
     if let Err(err) = create_audit_log(
@@ -85,7 +85,7 @@ pub async fn cargos_add(ctx: Ctx) -> WsResponse {
         None,
         Some(serde_json::json!({ "nombre": nombre, "descripcion": descripcion, "permisos": permisos })),
     ).await {
-        return WsResponse::internal_error(ctx.id, "cargos_add", err);
+        return WsResponse::from_service_error(ctx.id, "cargos_add", err);
     }
 
     if let Err(err) = tx.commit().await {
@@ -136,25 +136,25 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
         Err(err) => return WsResponse::internal_error(ctx.id, "cargos_update", err),
     };
 
-    let update_cargo = match update_cargo(&mut *tx, &nombre, &descripcion, cargo_id).await {
+    let updated_cargo = match update_cargo(&mut *tx, &nombre, &descripcion, cargo_id).await {
         Ok(cargo) => cargo,
-        Err(err) => return WsResponse::internal_error(ctx.id, "cargos_update", err),
+        Err(err) => return WsResponse::from_service_error(ctx.id, "cargos_update", err),
     };
 
     if let Err(err) = sync_cargo_permisos(&mut *tx, cargo_id, permisos.clone()).await {
-        return WsResponse::internal_error(ctx.id, "cargos_update", err);
+        return WsResponse::from_service_error(ctx.id, "cargos_update", err);
     }
 
     if let Err(err) = create_audit_log(
         &mut *tx,
         "cargo",
-        update_cargo.id,
+        updated_cargo.id, 
         "update",
         ctx.user_id,
         None,
         Some(serde_json::json!({ "nombre": nombre, "descripcion": descripcion, "permisos": permisos })),
     ).await {
-        return WsResponse::internal_error(ctx.id, "cargos_update", err);
+        return WsResponse::from_service_error(ctx.id, "cargos_update", err);
     }
 
     if let Err(err) = tx.commit().await {
@@ -164,7 +164,7 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
     ctx.emit(
         "cargos",
         "update",
-        serde_json::json!({ "data": update_cargo }),
+        serde_json::json!({ "data": updated_cargo }),
     );
 
     WsResponse::ok(ctx.id, serde_json::json!({}))
@@ -187,7 +187,7 @@ pub async fn cargos_delete(ctx: Ctx) -> WsResponse {
     };
 
     if let Err(err) = soft_delete_cargo(&mut *tx, cargo_id).await {
-        return WsResponse::internal_error(ctx.id, "cargos_delete", err);
+        return WsResponse::from_service_error(ctx.id, "cargos_delete", err);
     }
 
     if let Err(err) = create_audit_log(
@@ -201,7 +201,7 @@ pub async fn cargos_delete(ctx: Ctx) -> WsResponse {
     )
     .await
     {
-        return WsResponse::internal_error(ctx.id, "cargos_delete", err);
+        return WsResponse::from_service_error(ctx.id, "cargos_delete", err);
     }
 
     if let Err(err) = tx.commit().await {

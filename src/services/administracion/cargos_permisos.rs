@@ -41,6 +41,7 @@ where
         r#"
         INSERT INTO cargos_permisos (cargo_id, permiso_id)
         SELECT $1, unnest($2::uuid[])
+        ON CONFLICT (cargo_id, permiso_id) DO NOTHING
         RETURNING cargo_id, permiso_id
         "#,
         cargo_id,

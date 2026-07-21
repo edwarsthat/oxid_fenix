@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::app::app::AppState;
+use crate::{app::app::AppState, services::error::ServiceError};
 
 #[derive(Deserialize, Debug)]
 pub struct WsRequest {
@@ -78,5 +78,14 @@ impl WsResponse {
     pub fn internal_error(id: impl Into<String>, ctx: &str, err: impl std::fmt::Display) -> Self {
         tracing::error!("[{ctx}] {err}");
         Self::error(id, 500, "error interno")
+    }
+
+    pub fn from_service_error(id: impl Into<String>, ctx: &str, err: ServiceError) -> Self {
+        match err {
+            ServiceError::NotFound(msg) => Self::error(id, 404, &msg),
+            ServiceError::Conflict(msg) => Self::error(id, 409, &msg),
+            ServiceError::BadRequest(msg) => Self::error(id, 400, &msg),
+            err => Self::internal_error(id, ctx, err),
+        }
     }
 }
