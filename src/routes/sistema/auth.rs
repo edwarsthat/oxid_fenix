@@ -8,6 +8,7 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
 
     match resto {
         "usuario:listar" => controller::list_usuarios(ctx).await,
+        "logout" => controller::logout(ctx).await,
         _ => {
             tracing::warn!("[sistema::auth] !! acción desconocida: '{resto}'");
             WsResponse::error(ctx.id, 404, "Acción desconocida")

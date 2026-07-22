@@ -2,6 +2,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use axum::{Json, extract::State, response::IntoResponse};
 use chrono::Duration;
+use uuid::Uuid;
 
 use crate::{
     app::{app::AppState, error::ApiError},
@@ -43,5 +44,24 @@ pub async fn list_usuarios(ctx: Ctx) -> WsResponse {
         "[controller::sistema::auth] Listando Usuarios (id={})",
         ctx.id
     );
+    WsResponse::ok(ctx.id, serde_json::Value::Null)
+}
+
+pub async fn logout(ctx: Ctx) -> WsResponse {
+    
+    let token = match ctx.data.get("token").and_then(|v| v.as_str()) {
+        Some(token) => token,
+        None => return WsResponse::error(ctx.id, 400, "No hay token"),
+    };
+
+    let token_uuid: Uuid = match Uuid::parse_str(token) {
+        Ok(id) => id,
+        Err(_) => return WsResponse::error(ctx.id, 400, "token invalido")
+    };
+
+    if let Err(err) = ctx.state.sessions.eliminar(&token_uuid) {
+        return WsResponse::internal_error(ctx.id, "auth:logout", err)
+    }
+
     WsResponse::ok(ctx.id, serde_json::Value::Null)
 }
