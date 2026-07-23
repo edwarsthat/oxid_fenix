@@ -9,5 +9,6 @@ CREATE TABLE usuarios (
     cargo_id UUID NOT NULL REFERENCES cargos(id),
     activo BOOLEAN NOT NULL DEFAULT TRUE,
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    debe_cambiar_password BOOLEAN NOT NULL DEFAULT TRUE
 );

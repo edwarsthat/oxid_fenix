@@ -77,6 +77,7 @@ mod tests {
             activo: true,
             creado_en: Utc::now(),
             actualizado_en: Utc::now(),
+            debe_cambiar_password: false,
         }
     }
 

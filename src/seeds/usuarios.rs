@@ -11,8 +11,8 @@ pub async fn seed(pool: &PgPool) -> Result<(), SeedError> {
 
     let res = sqlx::query(
         r#"
-        INSERT INTO usuarios (nombre, apellido, email, usuario, password_hash, cargo_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO usuarios (nombre, apellido, email, usuario, password_hash, cargo_id, debe_cambiar_password)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (usuario) DO NOTHING
         "#,
     )
@@ -22,6 +22,7 @@ pub async fn seed(pool: &PgPool) -> Result<(), SeedError> {
     .bind("admin")
     .bind(&hash)
     .bind(cargo_id)
+    .bind(true)
     .execute(pool)
     .await?;
 

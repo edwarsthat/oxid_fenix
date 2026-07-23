@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
@@ -15,6 +15,7 @@ pub struct Usuario {
     pub activo: bool,
     pub creado_en: DateTime<Utc>,
     pub actualizado_en: DateTime<Utc>,
+    pub debe_cambiar_password: bool,
 }
 
 #[derive(Debug, FromRow, Serialize)]
@@ -28,4 +29,15 @@ pub struct UsuarioListItem {
     pub activo: bool,
     pub creado_en: DateTime<Utc>,
     pub actualizado_en: DateTime<Utc>,
+    pub debe_cambiar_password: bool,
+
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UsuariosAddPayload {
+    pub nombre: String,
+    pub apellido: String,
+    pub email: String,
+    pub usuario: String,
+    pub cargo_id: String
 }
