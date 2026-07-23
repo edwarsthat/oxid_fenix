@@ -41,8 +41,13 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
                 return WsResponse::error(ctx.id, 403, "sin permiso");
             }
             controller::permisos::permisos_read(ctx).await
-        }
-
+        },
+        "usuarios:read" => {
+            if !ctx.permisos.contains("usuarios:read"){
+                return WsResponse::error(ctx.id, 403, "sin permiso")
+            }
+            controller::usuarios::usuarios_read(ctx).await
+        },
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }
