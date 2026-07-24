@@ -90,3 +90,7 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
         serde_json::json!({ "data": nuevo_usuario, "password_temporal": password }),
     )
 }
+
+pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
+    
+}
