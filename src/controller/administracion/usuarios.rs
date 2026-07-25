@@ -1,7 +1,15 @@
 use uuid::Uuid;
 
 use crate::{
-    models::usuario::UsuariosAddPayload, routes::protocol::{Ctx, WsResponse}, security::password::{generar_temporal, hashear}, services::{administracion::usuarios::{create_usuario, get_usuarios}, logs::audit_logs::create_audit_log},
+    models::usuario::{UsuariosAddPayload, UsuariosUpdatePayload},
+    routes::protocol::{Ctx, WsResponse},
+    security::password::{generar_temporal, hashear},
+    services::{
+        administracion::usuarios::{
+            create_usuario, get_usuarios, newpassword_usuario, soft_delete_usuario, update_usuario,
+        },
+        logs::audit_logs::create_audit_log,
+    },
 };
 
 pub async fn usuarios_read(ctx: Ctx) -> WsResponse {
@@ -71,7 +79,9 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
             "usuario": payload.usuario,
             "cargo_id": cargo_id,
         })),
-    ).await {
+    )
+    .await
+    {
         return WsResponse::from_service_error(ctx.id, "usuarios_add", err);
     }
 
@@ -92,5 +102,173 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
-    
+    let payload: UsuariosUpdatePayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("payload invalido: {err}")),
+        };
+
+    if payload.nombre.trim().is_empty()
+        || payload.apellido.trim().is_empty()
+        || payload.email.trim().is_empty()
+        || payload.usuario.trim().is_empty()
+    {
+        return WsResponse::error(ctx.id, 400, "hay campos vacios");
+    }
+
+    let cargo_id: Uuid = match Uuid::parse_str(&payload.cargo_id) {
+        Ok(id) => id,
+        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id no valido"),
+    };
+
+    let usuario_id: Uuid = match Uuid::parse_str(&payload.usuario_id) {
+        Ok(id) => id,
+        Err(_) => return WsResponse::error(ctx.id, 400, "usuario_id no valido"),
+    };
+
+    let mut tx = match ctx.state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => return WsResponse::internal_error(ctx.id, "usuarios_update", err),
+    };
+
+    let usuario_actualizado = match update_usuario(
+        &mut *tx,
+        &payload.nombre,
+        &payload.apellido,
+        &payload.email,
+        &payload.usuario,
+        cargo_id,
+        usuario_id,
+    )
+    .await
+    {
+        Ok(usuario) => usuario,
+        Err(err) => return WsResponse::from_service_error(ctx.id, "usuarios_update", err),
+    };
+
+    if let Err(err) = create_audit_log(
+        &mut *tx,
+        "usuario",
+        usuario_actualizado.id,
+        "update",
+        ctx.user_id,
+        None,
+        Some(serde_json::json!({
+            "nombre": payload.nombre,
+            "apellido": payload.apellido,
+            "email": payload.email,
+            "usuario": payload.usuario,
+            "cargo_id": cargo_id,
+        })),
+    )
+    .await
+    {
+        return WsResponse::from_service_error(ctx.id, "usuarios_update", err);
+    }
+    if let Err(err) = tx.commit().await {
+        return WsResponse::internal_error(ctx.id, "usuarios_update", err);
+    }
+
+    ctx.emit(
+        "usuarios",
+        "update",
+        serde_json::json!({ "data": usuario_actualizado }),
+    );
+
+    WsResponse::ok(ctx.id, serde_json::json!({ "data": usuario_actualizado }))
+}
+
+pub async fn usuarios_delete(ctx: Ctx) -> WsResponse {
+    let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
+        Some(cargo_id) => cargo_id,
+        None => return WsResponse::error(ctx.id, 400, "Falta el usuario id"),
+    };
+
+    let usuario_id: Uuid = match Uuid::parse_str(&usuario_id) {
+        Ok(id) => id,
+        Err(_) => return WsResponse::error(ctx.id, 400, "Usuario invalido"),
+    };
+
+    let mut tx = match ctx.state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => return WsResponse::internal_error(ctx.id, "usuarios_delete", err),
+    };
+
+    if let Err(err) = soft_delete_usuario(&mut *tx, usuario_id).await {
+        return WsResponse::from_service_error(ctx.id, "usuarios_delete", err);
+    }
+
+    if let Err(err) = create_audit_log(
+        &mut *tx,
+        "usuario",
+        usuario_id,
+        "delete",
+        ctx.user_id,
+        None,
+        Some(serde_json::json!({ "usuario_id": usuario_id, "active": false })),
+    )
+    .await
+    {
+        return WsResponse::from_service_error(ctx.id, "usuarios_delete", err);
+    }
+
+    if let Err(err) = tx.commit().await {
+        return WsResponse::internal_error(ctx.id, "usuarios_delete", err);
+    }
+
+    ctx.emit(
+        "usuarios",
+        "delete",
+        serde_json::json!({ "usuario_id": usuario_id }),
+    );
+
+    return WsResponse::ok(ctx.id, serde_json::json!({}));
+}
+
+pub async fn usuarios_new_password(ctx: Ctx) -> WsResponse {
+    let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
+        Some(cargo_id) => cargo_id,
+        None => return WsResponse::error(ctx.id, 400, "Falta el usuario id"),
+    };
+
+    let usuario_id: Uuid = match Uuid::parse_str(&usuario_id) {
+        Ok(id) => id,
+        Err(_) => return WsResponse::error(ctx.id, 400, "Usuario invalido"),
+    };
+
+    let password = generar_temporal();
+    let hash = match hashear(&password) {
+        Ok(hash) => hash,
+        Err(err) => return WsResponse::internal_error(ctx.id, "usuarios_newpassword", err),
+    };
+
+    let mut tx = match ctx.state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => return WsResponse::internal_error(ctx.id, "usuarios_newpassword", err),
+    };
+
+    let usuario = match newpassword_usuario(&mut *tx, usuario_id, &hash).await {
+        Ok(usuario) => usuario,
+        Err(err) => return WsResponse::from_service_error(ctx.id, "usuarios_newpassword", err),
+    };
+
+    if let Err(err) = create_audit_log(
+        &mut *tx,
+        "usuario",
+        usuario.id,
+        "reset_password",
+        ctx.user_id,
+        None,
+        Some(serde_json::json!({ "accion": "reset_password" })),
+    )
+    .await
+    {
+        return WsResponse::from_service_error(ctx.id, "usuarios_newpassword", err);
+    }
+
+    if let Err(err) = tx.commit().await {
+        return WsResponse::internal_error(ctx.id, "usuarios_newpassword", err);
+    }
+
+    return WsResponse::ok(ctx.id, serde_json::json!({"password_temporal": password }));
 }

@@ -49,16 +49,28 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             controller::usuarios::usuarios_read(ctx).await
         }
         "usuarios:add" => {
-            if !ctx.permisos.contains("usuarios:read") {
+            if !ctx.permisos.contains("usuarios:add") {
                 return WsResponse::error(ctx.id, 403, "sin permiso");
             }
             controller::usuarios::usuarios_add(ctx).await
         }
         "usuarios:update" => {
-            if !ctx.permisos.contains("usuarios:read") {
+            if !ctx.permisos.contains("usuarios:update") {
                 return WsResponse::error(ctx.id, 403, "sin permiso");
             }
-            controller::usuarios::usuarios_add(ctx).await
+            controller::usuarios::usuarios_update(ctx).await
+        }
+        "usuarios:delete" => {
+            if !ctx.permisos.contains("usuarios:delete") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::usuarios::usuarios_delete(ctx).await
+        }
+        "usuarios:newpassword" => {
+            if !ctx.permisos.contains("usuarios:update") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::usuarios::usuarios_new_password(ctx).await
         }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }

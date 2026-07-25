@@ -13,6 +13,9 @@ pub enum ApiError {
     #[error("credenciales invalidas")]
     CredencialesInvalidas,
 
+    #[error("usuario inactivo")]
+    UsuarioInactivo,
+
     #[error("session error: {0}")]
     Session(#[from] SessionError),
 }
@@ -23,6 +26,7 @@ impl IntoResponse for ApiError {
 
         let (status, mensaje) = match self {
             ApiError::CredencialesInvalidas => (StatusCode::UNAUTHORIZED, "credenciales inválidas"),
+            ApiError::UsuarioInactivo => (StatusCode::FORBIDDEN, "usuario inactivo"),
             ApiError::Service(_) => (StatusCode::INTERNAL_SERVER_ERROR, "error interno"),
             ApiError::Session(_) => (StatusCode::INTERNAL_SERVER_ERROR, "error interno"),
         };

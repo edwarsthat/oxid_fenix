@@ -29,6 +29,10 @@ pub async fn login(
         return Err(ApiError::CredencialesInvalidas);
     };
 
+    if !usuario.activo {
+        return Err(ApiError::UsuarioInactivo);
+    }
+
     let permisos = auth::get_permisos_por_cargo(&state.pool, usuario.cargo_id).await?;
     let permisos_map: Arc<HashSet<String>> = Arc::new(permisos.clone().into_iter().collect());
 

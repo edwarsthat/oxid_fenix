@@ -41,3 +41,13 @@ pub struct UsuariosAddPayload {
     pub usuario: String,
     pub cargo_id: String
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UsuariosUpdatePayload {
+    pub nombre: String,
+    pub apellido: String,
+    pub email: String,
+    pub usuario: String,
+    pub cargo_id: String,
+    pub usuario_id: String
+}
