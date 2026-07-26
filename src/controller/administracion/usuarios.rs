@@ -6,7 +6,8 @@ use crate::{
     security::password::{generar_temporal, hashear},
     services::{
         administracion::usuarios::{
-            create_usuario, get_usuarios, newpassword_usuario, soft_delete_usuario, update_usuario,
+            activar_usuario, create_usuario, get_usuarios, newpassword_usuario,
+            soft_delete_usuario, update_usuario,
         },
         logs::audit_logs::create_audit_log,
     },
@@ -271,4 +272,61 @@ pub async fn usuarios_new_password(ctx: Ctx) -> WsResponse {
     }
 
     return WsResponse::ok(ctx.id, serde_json::json!({"password_temporal": password }));
+}
+
+pub async fn usuarios_activar(ctx: Ctx) -> WsResponse {
+    let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
+        Some(usuario_id) => usuario_id,
+        None => return WsResponse::error(ctx.id, 400, "Falta el usuario id"),
+    };
+
+    let usuario_id: Uuid = match Uuid::parse_str(&usuario_id) {
+        Ok(id) => id,
+        Err(_) => return WsResponse::error(ctx.id, 400, "usuario_id no valido"),
+    };
+
+    let password = generar_temporal();
+    let hash = match hashear(&password) {
+        Ok(hash) => hash,
+        Err(err) => return WsResponse::internal_error(ctx.id, "usuarios_activar", err),
+    };
+
+    let mut tx = match ctx.state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => return WsResponse::internal_error(ctx.id, "usuarios_activar", err),
+    };
+
+    let usuario_activado = match activar_usuario(&mut *tx, usuario_id, &hash).await {
+        Ok(usuario) => usuario,
+        Err(err) => return WsResponse::from_service_error(ctx.id, "usuarios_activar", err),
+    };
+
+    if let Err(err) = create_audit_log(
+        &mut *tx,
+        "usuario",
+        usuario_activado.id,
+        "activar",
+        ctx.user_id,
+        None,
+        Some(serde_json::json!({ "usuario_id": usuario_id, "activo": true })),
+    )
+    .await
+    {
+        return WsResponse::from_service_error(ctx.id, "usuarios_activar", err);
+    }
+
+    if let Err(err) = tx.commit().await {
+        return WsResponse::internal_error(ctx.id, "usuarios_activar", err);
+    }
+
+    ctx.emit(
+        "usuarios",
+        "update",
+        serde_json::json!({ "data": usuario_activado }),
+    );
+
+    WsResponse::ok(
+        ctx.id,
+        serde_json::json!({ "data": usuario_activado, "password_temporal": password }),
+    )
 }

@@ -126,7 +126,7 @@ where
         r#"
         UPDATE usuarios
         SET password_hash = $1, debe_cambiar_password = TRUE, actualizado_en = NOW()
-        WHERE id = $2
+        WHERE id = $2 
         RETURNING id, nombre, apellido, email, usuario, cargo_id, activo, creado_en, actualizado_en, debe_cambiar_password
         "#,
         new_password_hash,
@@ -142,6 +142,34 @@ where
     Ok(usuario)
 }
 
+pub async fn activar_usuario<'e, E>(
+    executor: E,
+    usuario_id: Uuid,
+    new_password_hash: &str
+) -> Result<UsuarioListItem, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let usuario = sqlx::query_as!(
+        UsuarioListItem,
+        r#"
+        UPDATE usuarios
+        SET password_hash = $1, debe_cambiar_password = TRUE, actualizado_en = NOW(), activo = TRUE
+        WHERE id = $2 AND activo = FALSE
+        RETURNING id, nombre, apellido, email, usuario, cargo_id, activo, creado_en, actualizado_en, debe_cambiar_password
+        "#,
+        new_password_hash,
+        usuario_id
+    )
+    .fetch_one(executor)
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => ServiceError::NotFound("usuario no encontrado".into()),
+        err => map_conflicto_usuario(err),
+    })?;
+
+    Ok(usuario)
+}
 
 fn map_conflicto_usuario(err: sqlx::Error) -> ServiceError {
     if let sqlx::Error::Database(db_err) = &err {
