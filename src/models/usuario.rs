@@ -10,6 +10,7 @@ pub struct Usuario {
     pub apellido: String,
     pub email: String,
     pub usuario: String,
+    #[serde(skip_serializing)]
     pub password_hash: String,
     pub cargo_id: Uuid,
     pub activo: bool,

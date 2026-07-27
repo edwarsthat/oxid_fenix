@@ -18,6 +18,15 @@ pub enum ApiError {
 
     #[error("session error: {0}")]
     Session(#[from] SessionError),
+
+    #[error("token ausente")]
+    TokenAusente,
+
+    #[error("token invalido")]
+    TokenInvalido,
+
+    #[error("error de hash: {0}")]
+    Hash(#[from] argon2::password_hash::Error),
 }
 
 impl IntoResponse for ApiError {
@@ -29,6 +38,9 @@ impl IntoResponse for ApiError {
             ApiError::UsuarioInactivo => (StatusCode::FORBIDDEN, "usuario inactivo"),
             ApiError::Service(_) => (StatusCode::INTERNAL_SERVER_ERROR, "error interno"),
             ApiError::Session(_) => (StatusCode::INTERNAL_SERVER_ERROR, "error interno"),
+            ApiError::TokenAusente => (StatusCode::UNAUTHORIZED, "credenciales inválidas"),
+            ApiError::TokenInvalido => (StatusCode::UNAUTHORIZED, "credenciales inválidas"),
+            ApiError::Hash(_) => (StatusCode::INTERNAL_SERVER_ERROR, "error interno"),
         };
 
         (status, mensaje).into_response()

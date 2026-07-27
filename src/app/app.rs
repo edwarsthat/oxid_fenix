@@ -12,9 +12,7 @@ use sqlx::PgPool;
 use tokio::sync::broadcast;
 
 use crate::{
-    app::error::WsError,
-    controller::sistema::auth::login,
-    sessions::memory::{Session, SessionStore},
+    app::error::WsError, controller::sistema::auth::{change_password, login}, sessions::memory::{Session, SessionStore},
 };
 
 #[derive(Clone)]
@@ -28,6 +26,7 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/login", post(login))
+        .route( "/cambiar-password", post(change_password)) 
         .route("/ws", get(ws_handler))
         .with_state(state)
 }

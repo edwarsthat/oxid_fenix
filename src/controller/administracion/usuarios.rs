@@ -1,15 +1,10 @@
 use uuid::Uuid;
 
 use crate::{
-    models::usuario::{UsuariosAddPayload, UsuariosUpdatePayload},
-    routes::protocol::{Ctx, WsResponse},
-    security::password::{generar_temporal, hashear},
-    services::{
+    models::usuario::{UsuariosAddPayload, UsuariosUpdatePayload}, routes::protocol::{Ctx, WsResponse}, security::password::{generar_temporal, hashear}, services::{
         administracion::usuarios::{
-            activar_usuario, create_usuario, get_usuarios, newpassword_usuario,
-            soft_delete_usuario, update_usuario,
-        },
-        logs::audit_logs::create_audit_log,
+            activar_usuario, create_usuario, get_usuarios, newpassword_usuario, soft_delete_usuario, update_usuario,
+        }, logs::audit_logs::create_audit_log,
     },
 };
 
