@@ -1,7 +1,10 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{models::usuario::UsuarioListItem, services::error::ServiceError};
+use crate::{
+    models::usuario::{UsuarioDatos, UsuarioListItem},
+    services::error::ServiceError,
+};
 
 pub async fn get_usuarios(pool: &PgPool) -> Result<Vec<UsuarioListItem>, ServiceError> {
     let usuarios = sqlx::query_as!(
