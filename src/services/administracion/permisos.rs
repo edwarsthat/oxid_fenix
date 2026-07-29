@@ -1,6 +1,6 @@
 use sqlx::PgPool;
 
-use crate::{models::permiso::PermisoResumen, services::error::ServiceError};
+use crate::{models::administracion::permiso::PermisoResumen, services::error::ServiceError};
 
 
 pub async fn get_permisos(

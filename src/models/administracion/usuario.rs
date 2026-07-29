@@ -3,6 +3,8 @@ use sqlx::FromRow;
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
+use crate::models::validations::ValidacionError;
+
 #[derive(Debug, FromRow, Serialize)]
 pub struct Usuario {
     pub id: Uuid,
@@ -76,7 +78,7 @@ fn normalizar(
     email: &str,
     usuario: &str,
     cargo_id: &str,
-) -> Result<UsuarioDatos, String> {
+) -> Result<UsuarioDatos, ValidacionError> {
     let nombre = nombre.trim();
     let apellido = apellido.trim();
     // el email se guarda en minúsculas para que la unicidad no dependa de cómo
@@ -85,26 +87,31 @@ fn normalizar(
     let usuario = usuario.trim();
 
     if nombre.is_empty() || apellido.is_empty() || email.is_empty() || usuario.is_empty() {
-        return Err("hay campos vacios".into());
+        return Err(ValidacionError::nuevo("hay campos vacios"));
     }
 
     if nombre.chars().count() > MAX_NOMBRE || apellido.chars().count() > MAX_NOMBRE {
-        return Err(format!("nombre y apellido no pueden superar {MAX_NOMBRE} caracteres"));
+        return Err(ValidacionError::nuevo(format!(
+            "nombre y apellido no pueden superar {MAX_NOMBRE} caracteres"
+        )));
     }
 
     if email.chars().count() > MAX_EMAIL || usuario.chars().count() > MAX_EMAIL {
-        return Err(format!("email y usuario no pueden superar {MAX_EMAIL} caracteres"));
+        return Err(ValidacionError::nuevo(format!(
+            "email y usuario no pueden superar {MAX_EMAIL} caracteres"
+        )));
     }
 
     if !es_email_valido(&email) {
-        return Err("email no valido".into());
+        return Err(ValidacionError::nuevo("email no valido"));
     }
 
     if usuario.contains(char::is_whitespace) {
-        return Err("el usuario no puede tener espacios".into());
+        return Err(ValidacionError::nuevo("el usuario no puede tener espacios"));
     }
 
-    let cargo_id = Uuid::parse_str(cargo_id).map_err(|_| "cargo_id no valido".to_string())?;
+    let cargo_id =
+        Uuid::parse_str(cargo_id).map_err(|_| ValidacionError::nuevo("cargo_id no valido"))?;
 
     Ok(UsuarioDatos {
         nombre: nombre.to_string(),
@@ -132,7 +139,7 @@ fn es_email_valido(email: &str) -> bool {
 }
 
 impl UsuariosAddPayload {
-    pub fn validar(&self) -> Result<UsuarioDatos, String> {
+    pub fn validar(&self) -> Result<UsuarioDatos, ValidacionError> {
         normalizar(
             &self.nombre,
             &self.apellido,
@@ -145,7 +152,7 @@ impl UsuariosAddPayload {
 
 impl UsuariosUpdatePayload {
     /// Devuelve los datos normalizados y el id del usuario a modificar.
-    pub fn validar(&self) -> Result<(UsuarioDatos, Uuid), String> {
+    pub fn validar(&self) -> Result<(UsuarioDatos, Uuid), ValidacionError> {
         let datos = normalizar(
             &self.nombre,
             &self.apellido,
@@ -154,8 +161,8 @@ impl UsuariosUpdatePayload {
             &self.cargo_id,
         )?;
 
-        let usuario_id =
-            Uuid::parse_str(&self.usuario_id).map_err(|_| "usuario_id no valido".to_string())?;
+        let usuario_id = Uuid::parse_str(&self.usuario_id)
+            .map_err(|_| ValidacionError::nuevo("usuario_id no valido"))?;
 
         Ok((datos, usuario_id))
     }
@@ -200,7 +207,7 @@ mod tests {
             ..add_payload()
         };
 
-        assert_eq!(payload.validar().unwrap_err(), "hay campos vacios");
+        assert_eq!(payload.validar().unwrap_err().mensaje(), "hay campos vacios");
     }
 
     #[test]
@@ -210,7 +217,7 @@ mod tests {
             ..add_payload()
         };
 
-        assert_eq!(payload.validar().unwrap_err(), "email no valido");
+        assert_eq!(payload.validar().unwrap_err().mensaje(), "email no valido");
     }
 
     #[test]
@@ -220,7 +227,7 @@ mod tests {
             ..add_payload()
         };
 
-        assert_eq!(payload.validar().unwrap_err(), "email no valido");
+        assert_eq!(payload.validar().unwrap_err().mensaje(), "email no valido");
     }
 
     #[test]
@@ -231,7 +238,7 @@ mod tests {
         };
 
         assert_eq!(
-            payload.validar().unwrap_err(),
+            payload.validar().unwrap_err().mensaje(),
             "el usuario no puede tener espacios"
         );
     }
@@ -243,7 +250,11 @@ mod tests {
             ..add_payload()
         };
 
-        assert!(payload.validar().unwrap_err().contains("100 caracteres"));
+        assert!(payload
+            .validar()
+            .unwrap_err()
+            .mensaje()
+            .contains("100 caracteres"));
     }
 
     #[test]
@@ -253,7 +264,7 @@ mod tests {
             ..add_payload()
         };
 
-        assert_eq!(payload.validar().unwrap_err(), "cargo_id no valido");
+        assert_eq!(payload.validar().unwrap_err().mensaje(), "cargo_id no valido");
     }
 
     #[test]
@@ -286,6 +297,9 @@ mod tests {
             usuario_id: "no-es-un-uuid".into(),
         };
 
-        assert_eq!(payload.validar().unwrap_err(), "usuario_id no valido");
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "usuario_id no valido"
+        );
     }
 }

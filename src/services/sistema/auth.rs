@@ -1,7 +1,9 @@
 use sqlx::{self, PgPool};
 use uuid::Uuid;
 
-use crate::{models::usuario::Usuario, security::password, services::error::ServiceError};
+use crate::{
+    models::administracion::usuario::Usuario, security::password, services::error::ServiceError,
+};
 
 
 // Hash argon2 de cualquier contraseña, generado una vez con hashear()

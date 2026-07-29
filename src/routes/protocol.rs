@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{app::app::AppState, services::error::ServiceError};
+use crate::{app::app::AppState, models::validations::ValidacionError, services::error::ServiceError};
 
 #[derive(Deserialize, Debug)]
 pub struct WsRequest {
@@ -87,6 +87,10 @@ impl WsResponse {
             ServiceError::BadRequest(msg) => Self::error(id, 400, &msg),
             err => Self::internal_error(id, ctx, err),
         }
+    }
+
+    pub fn from_validacion_error(id: impl Into<String>, err: ValidacionError) -> Self {
+        Self::error(id, 400, err.mensaje())
     }
 }
 

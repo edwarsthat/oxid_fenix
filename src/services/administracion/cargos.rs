@@ -1,4 +1,4 @@
-use crate::{models::cargo::Cargo, services::error::ServiceError};
+use crate::{models::administracion::cargo::Cargo, services::error::ServiceError};
 use sqlx::PgPool;
 use uuid::Uuid;
 

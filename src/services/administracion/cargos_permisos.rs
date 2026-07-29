@@ -1,7 +1,9 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{models::{cargos_permisos::CargosPermisos}, services::error::ServiceError};
+use crate::{
+    models::administracion::cargos_permisos::CargosPermisos, services::error::ServiceError,
+};
 
 pub async fn get_permisos_de_cargo(
     pool: &PgPool,

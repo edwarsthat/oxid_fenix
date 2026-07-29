@@ -2,7 +2,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    models::usuario::{UsuarioDatos, UsuarioListItem},
+    models::administracion::usuario::UsuarioListItem,
     services::error::ServiceError,
 };
 

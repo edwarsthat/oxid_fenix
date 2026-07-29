@@ -2,7 +2,7 @@ use axum::{http::StatusCode, response::IntoResponse};
 use thiserror::Error;
 
 use crate::{
-    routes::protocol::WsResponse, services::error::ServiceError, sessions::error::SessionError,
+    models::validations::ValidacionError, routes::protocol::WsResponse, services::error::ServiceError, sessions::error::SessionError
 };
 
 #[derive(Debug, Error)]
@@ -27,20 +27,49 @@ pub enum ApiError {
 
     #[error("error de hash: {0}")]
     Hash(#[from] argon2::password_hash::Error),
+
+    #[error("password invalida: {0}")]
+    PasswordInvalida(String),
+
+    #[error("validacion: {0}")]
+    Validacion(#[from] ValidacionError),
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         eprintln!("[ApiError] {self}");
 
+        // `PasswordInvalida` es el único que devuelve su mensaje tal cual: son
+        // reglas públicas que el usuario necesita ver para corregir. El resto
+        // sigue con mensajes genéricos para no filtrar detalles internos.
         let (status, mensaje) = match self {
-            ApiError::CredencialesInvalidas => (StatusCode::UNAUTHORIZED, "credenciales inválidas"),
-            ApiError::UsuarioInactivo => (StatusCode::FORBIDDEN, "usuario inactivo"),
-            ApiError::Service(_) => (StatusCode::INTERNAL_SERVER_ERROR, "error interno"),
-            ApiError::Session(_) => (StatusCode::INTERNAL_SERVER_ERROR, "error interno"),
-            ApiError::TokenAusente => (StatusCode::UNAUTHORIZED, "credenciales inválidas"),
-            ApiError::TokenInvalido => (StatusCode::UNAUTHORIZED, "credenciales inválidas"),
-            ApiError::Hash(_) => (StatusCode::INTERNAL_SERVER_ERROR, "error interno"),
+            ApiError::CredencialesInvalidas => (
+                StatusCode::UNAUTHORIZED,
+                "credenciales inválidas".to_string(),
+            ),
+            ApiError::UsuarioInactivo => (StatusCode::FORBIDDEN, "usuario inactivo".to_string()),
+            ApiError::Service(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "error interno".to_string(),
+            ),
+            ApiError::Session(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "error interno".to_string(),
+            ),
+            ApiError::TokenAusente => (
+                StatusCode::UNAUTHORIZED,
+                "credenciales inválidas".to_string(),
+            ),
+            ApiError::TokenInvalido => (
+                StatusCode::UNAUTHORIZED,
+                "credenciales inválidas".to_string(),
+            ),
+            ApiError::Hash(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "error interno".to_string(),
+            ),
+            ApiError::PasswordInvalida(msg) => (StatusCode::BAD_REQUEST, msg),
+            ApiError::Validacion(err) => (StatusCode::BAD_REQUEST, err.mensaje().to_string()),
         };
 
         (status, mensaje).into_response()
@@ -184,7 +213,10 @@ mod tests {
         assert_eq!(WsError::Session(SessionError::NotFound).status_code(), 401);
 
         // fallo interno del servidor -> 500
-        assert_eq!(WsError::Session(SessionError::LockEnvenenado).status_code(), 500);
+        assert_eq!(
+            WsError::Session(SessionError::LockEnvenenado).status_code(),
+            500
+        );
     }
 
     #[test]

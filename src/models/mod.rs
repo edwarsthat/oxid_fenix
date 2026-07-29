@@ -1,5 +1,4 @@
-pub mod cargo;
-pub mod permiso;
-pub mod usuario;
-pub mod cargos_permisos;
+pub mod administracion;
+pub mod auth;
 pub mod audit_logs;
+pub mod validations;

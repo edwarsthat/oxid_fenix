@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use uuid::Uuid;
 
 use crate::{
-    models::usuario::{UsuariosAddPayload, UsuariosUpdatePayload},
+    models::administracion::usuario::{UsuariosAddPayload, UsuariosUpdatePayload},
     routes::protocol::{Ctx, WsResponse},
     security::password::{generar_temporal, hashear},
     services::{
@@ -30,13 +30,10 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
             Err(err) => return WsResponse::error(ctx.id, 400, &format!("payload invalido: {err}")),
         };
 
-    if payload.nombre.trim().is_empty()
-        || payload.apellido.trim().is_empty()
-        || payload.email.trim().is_empty()
-        || payload.usuario.trim().is_empty()
-    {
-        return WsResponse::error(ctx.id, 400, "hay campos vacios");
-    }
+    let datos = match payload.validar() {
+        Ok(datos) => datos,
+        Err(err) => return WsResponse::from_validacion_error(ctx.id, err),
+    };
 
     let cargo_id: Uuid = match Uuid::parse_str(&payload.cargo_id) {
         Ok(id) => id,
@@ -56,10 +53,10 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
 
     let nuevo_usuario = match create_usuario(
         &mut *tx,
-        &payload.nombre,
-        &payload.apellido,
-        &payload.email,
-        &payload.usuario,
+        &datos.nombre,
+        &datos.apellido,
+        &datos.email,
+        &datos.usuario,
         &hash,
         cargo_id,
     )
