@@ -16,6 +16,7 @@ async fn main() {
 }
 
 async fn run() -> Result<(), AppError>{
+    tracing_subscriber::fmt::init();
     dotenvy::dotenv().ok();
     let pool = connect().await?;
     let sessions = SessionStore::new();

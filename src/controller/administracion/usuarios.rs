@@ -35,11 +35,6 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
         Err(err) => return WsResponse::from_validacion_error(ctx.id, err),
     };
 
-    let cargo_id: Uuid = match Uuid::parse_str(&payload.cargo_id) {
-        Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id no valido"),
-    };
-
     let password = generar_temporal();
     let hash = match hashear(&password) {
         Ok(hash) => hash,
@@ -58,7 +53,7 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
         &datos.email,
         &datos.usuario,
         &hash,
-        cargo_id,
+        datos.cargo_id,
     )
     .await
     {
@@ -74,11 +69,11 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
         ctx.user_id,
         None,
         Some(serde_json::json!({
-            "nombre": payload.nombre,
-            "apellido": payload.apellido,
-            "email": payload.email,
-            "usuario": payload.usuario,
-            "cargo_id": cargo_id,
+            "nombre": datos.nombre,
+            "apellido": datos.apellido,
+            "email": datos.email,
+            "usuario": datos.usuario,
+            "cargo_id": datos.cargo_id,
         })),
     )
     .await
@@ -109,22 +104,9 @@ pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
             Err(err) => return WsResponse::error(ctx.id, 400, &format!("payload invalido: {err}")),
         };
 
-    if payload.nombre.trim().is_empty()
-        || payload.apellido.trim().is_empty()
-        || payload.email.trim().is_empty()
-        || payload.usuario.trim().is_empty()
-    {
-        return WsResponse::error(ctx.id, 400, "hay campos vacios");
-    }
-
-    let cargo_id: Uuid = match Uuid::parse_str(&payload.cargo_id) {
-        Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id no valido"),
-    };
-
-    let usuario_id: Uuid = match Uuid::parse_str(&payload.usuario_id) {
-        Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "usuario_id no valido"),
+    let (datos, usuario_id) = match payload.validar() {
+        Ok(datos) => datos,
+        Err(err) => return WsResponse::from_validacion_error(ctx.id, err),
     };
 
     let mut tx = match ctx.state.pool.begin().await {
@@ -134,11 +116,11 @@ pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
 
     let usuario_actualizado = match update_usuario(
         &mut *tx,
-        &payload.nombre,
-        &payload.apellido,
-        &payload.email,
-        &payload.usuario,
-        cargo_id,
+        &datos.nombre,
+        &datos.apellido,
+        &datos.email,
+        &datos.usuario,
+        datos.cargo_id,
         usuario_id,
     )
     .await
@@ -155,11 +137,11 @@ pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
         ctx.user_id,
         None,
         Some(serde_json::json!({
-            "nombre": payload.nombre,
-            "apellido": payload.apellido,
-            "email": payload.email,
-            "usuario": payload.usuario,
-            "cargo_id": cargo_id,
+            "nombre": datos.nombre,
+            "apellido": datos.apellido,
+            "email": datos.email,
+            "usuario": datos.usuario,
+            "cargo_id": datos.cargo_id,
         })),
     )
     .await
@@ -171,18 +153,26 @@ pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
         return WsResponse::internal_error(ctx.id, "usuarios_update", err);
     }
 
-    match get_permisos_por_cargo(&ctx.state.pool, cargo_id).await {
+    match get_permisos_por_cargo(&ctx.state.pool, datos.cargo_id).await {
         Ok(p) => {
             let permisos: Arc<HashSet<String>> = Arc::new(p.into_iter().collect());
-            if let Err(err) = ctx
-                .state
-                .sessions
-                .actualizar_permisos_por_usuario(usuario_id, cargo_id, permisos)
-            {
-                tracing::error!("[usuarios_update] no se refrescaron permisos: {err}");
+            if let Err(err) = ctx.state.sessions.actualizar_permisos_por_usuario(
+                usuario_id,
+                datos.cargo_id,
+                permisos,
+            ) {
+                tracing::error!("[usuarios_update] no se refrescaron permisos, expulsando cargo: {err}");
+                if let Err(e) = ctx.state.sessions.eliminar_por_cargo(datos.cargo_id) {
+                    tracing::error!("[usuarios_update] error al expulsar cargo: {e}");
+                }
             }
         }
-        Err(err) => tracing::error!("[usuarios_update] no se refrescaron permisos: {err}"),
+        Err(err) => {
+            tracing::error!("[usuarios_update] no se obtuvieron permisos, expulsando cargo: {err}");
+            if let Err(e) = ctx.state.sessions.eliminar_por_cargo(datos.cargo_id) {
+                tracing::error!("[usuarios_update] error al expulsar cargo: {e}");
+            }
+        }
     }
 
     ctx.emit(
@@ -196,7 +186,7 @@ pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
 
 pub async fn usuarios_delete(ctx: Ctx) -> WsResponse {
     let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
-        Some(cargo_id) => cargo_id,
+        Some(usuario_id) => usuario_id,
         None => return WsResponse::error(ctx.id, 400, "Falta el usuario id"),
     };
 
@@ -228,12 +218,12 @@ pub async fn usuarios_delete(ctx: Ctx) -> WsResponse {
         return WsResponse::from_service_error(ctx.id, "usuarios_delete", err);
     }
 
-    if let Err(err) = ctx.state.sessions.eliminar_por_usuario(usuario_id) {
-        return WsResponse::internal_error(ctx.id, "auth:logout", err);
-    }
-
     if let Err(err) = tx.commit().await {
         return WsResponse::internal_error(ctx.id, "usuarios_delete", err);
+    }
+
+    if let Err(err) = ctx.state.sessions.eliminar_por_usuario(usuario_id) {
+        tracing::error!("[usuarios_delete] no se cerro sesion usuario {usuario_id}: {err}")
     }
 
     ctx.emit(
@@ -247,7 +237,7 @@ pub async fn usuarios_delete(ctx: Ctx) -> WsResponse {
 
 pub async fn usuarios_new_password(ctx: Ctx) -> WsResponse {
     let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
-        Some(cargo_id) => cargo_id,
+        Some(usuario_id) => usuario_id,
         None => return WsResponse::error(ctx.id, 400, "Falta el usuario id"),
     };
 
@@ -286,12 +276,12 @@ pub async fn usuarios_new_password(ctx: Ctx) -> WsResponse {
         return WsResponse::from_service_error(ctx.id, "usuarios_newpassword", err);
     }
 
-    if let Err(err) = ctx.state.sessions.eliminar_por_usuario(usuario_id) {
-        return WsResponse::internal_error(ctx.id, "auth:logout", err);
-    }
-
     if let Err(err) = tx.commit().await {
         return WsResponse::internal_error(ctx.id, "usuarios_newpassword", err);
+    }
+
+    if let Err(err) = ctx.state.sessions.eliminar_por_usuario(usuario_id) {
+        tracing::error!("[usuarios_new_password] no se cerro sesion usuario {usuario_id}: {err}")
     }
 
     return WsResponse::ok(ctx.id, serde_json::json!({"password_temporal": password }));

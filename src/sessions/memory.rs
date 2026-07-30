@@ -64,26 +64,30 @@ impl SessionStore {
         }
     }
 
-pub fn actualizar_permisos_por_usuario(
-    &self,
-    usuario_id: Uuid,
-    cargo_id: Uuid,
-    permisos: Arc<HashSet<String>>,
-) -> Result<usize, SessionError> {
-    let mut mapa = self.inner.write().map_err(|_| SessionError::LockEnvenenado)?;
-    let mut n = 0;
-    for s in mapa.values_mut().filter(|s| s.usuario_id == usuario_id) {
-        s.cargo_id = cargo_id;
-        s.permisos = permisos.clone();
-        n += 1;
+    pub fn actualizar_permisos_por_usuario(
+        &self,
+        usuario_id: Uuid,
+        cargo_id: Uuid,
+        permisos: Arc<HashSet<String>>,
+    ) -> Result<usize, SessionError> {
+        let mut mapa = self
+            .inner
+            .write()
+            .map_err(|_| SessionError::LockEnvenenado)?;
+        let mut n = 0;
+        for s in mapa.values_mut().filter(|s| s.usuario_id == usuario_id) {
+            s.cargo_id = cargo_id;
+            s.permisos = permisos.clone();
+            n += 1;
+        }
+        Ok(n)
     }
-    Ok(n)
-}
 
-
-    pub fn eliminar_por_usuario(&self, usuario_id: Uuid) -> Result<usize, SessionError>{
-        let mut mapa  = self
-            .inner.write().map_err(|_| SessionError::LockEnvenenado)?;
+    pub fn eliminar_por_usuario(&self, usuario_id: Uuid) -> Result<usize, SessionError> {
+        let mut mapa = self
+            .inner
+            .write()
+            .map_err(|_| SessionError::LockEnvenenado)?;
         let antes = mapa.len();
         mapa.retain(|_, s| s.usuario_id != usuario_id);
         Ok(antes - mapa.len())
@@ -96,6 +100,15 @@ pub fn actualizar_permisos_por_usuario(
             .remove(id);
         Ok(())
     }
+
+    pub fn eliminar_por_cargo(&self, cargo_id:Uuid) -> Result<usize, SessionError> {
+        let mut mapa = self.inner.write().map_err(|_| SessionError::LockEnvenenado)?;
+        let antes = mapa.len();
+        mapa.retain(|_, s| s.cargo_id != cargo_id);
+        Ok(antes - mapa.len()) 
+    }
+
+
 }
 
 #[cfg(test)]

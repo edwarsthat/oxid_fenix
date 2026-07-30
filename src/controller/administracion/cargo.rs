@@ -161,6 +161,10 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
         return WsResponse::internal_error(ctx.id, "cargos_update", err);
     }
 
+    if let Err(err) = ctx.state.sessions.eliminar_por_cargo(cargo_id) {
+        tracing::error!("[cargos_update] no se cerraron sesiones del cargo {cargo_id}: {err}");
+    }
+
     ctx.emit(
         "cargos",
         "update",
@@ -206,6 +210,10 @@ pub async fn cargos_delete(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = tx.commit().await {
         return WsResponse::internal_error(ctx.id, "cargos_delete", err);
+    }
+
+    if let Err(err) = ctx.state.sessions.eliminar_por_cargo(cargo_id) {
+        tracing::error!("[cargos_delete] no se cerraron sesiones del cargo {cargo_id}: {err}");
     }
 
     ctx.emit(
