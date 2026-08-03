@@ -6,7 +6,10 @@ use uuid::Uuid;
 
 use crate::{
     app::{app::AppState, error::ApiError},
-    models::{auth::login::{ChangePasswordInput, LoginInput}, validations::Validar},
+    models::{
+        auth::login::{ChangePasswordInput, LoginInput},
+        validations::Validar,
+    },
     routes::protocol::{Ctx, WsResponse},
     security::password::hashear,
     services::{
@@ -33,12 +36,15 @@ pub async fn login(
     let permisos = auth::get_permisos_por_cargo(&state.pool, usuario.cargo_id.clone()).await?;
     let permisos_map: Arc<HashSet<String>> = Arc::new(permisos.clone().into_iter().collect());
 
+    // La sesión arrastra el flag: el dispatcher la deja solo cerrar sesión hasta
+    // que la contraseña temporal se cambie por /cambiar-password.
     let session = state.sessions.crear(
         usuario.id,
         usuario.cargo_id,
         Duration::minutes(480),
         permisos_map,
-    )?;
+        usuario.debe_cambiar_password,
+    );
 
     Ok(Json(
         serde_json::json!({ "status": "ok", "session_id": session, "permisos": permisos, "usuario": usuario }),
@@ -54,19 +60,16 @@ pub async fn list_usuarios(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn logout(ctx: Ctx) -> WsResponse {
-    let token = match ctx.data.get("token").and_then(|v| v.as_str()) {
-        Some(token) => token,
-        None => return WsResponse::error(ctx.id, 400, "No hay token"),
-    };
-
-    let token_uuid: Uuid = match Uuid::parse_str(token) {
+    let token_uuid: Uuid = match Uuid::parse_str(&ctx.token) {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "token invalido"),
+        Err(_) => return WsResponse::error(ctx.id, 401, "no autenticado"),
     };
 
-    if let Err(err) = ctx.state.sessions.eliminar(&token_uuid) {
-        return WsResponse::internal_error(ctx.id, "auth:logout", err);
+    if ctx.state.sessions.validar(&token_uuid).is_none() {
+        return WsResponse::error(ctx.id, 401, "no autenticado");
     }
+
+    ctx.state.sessions.eliminar(&token_uuid);
 
     WsResponse::ok(ctx.id, serde_json::Value::Null)
 }
@@ -89,12 +92,11 @@ pub async fn change_password(
     let session_id = Uuid::parse_str(token).map_err(|_| ApiError::TokenInvalido)?;
     let session = state
         .sessions
-        .validar(&session_id)?
+        .validar(&session_id)
         .ok_or(ApiError::TokenInvalido)?;
 
-    let Some(autenticado) = auth::verificar_credenciales(
-        &state.pool, &datos.usuario, &datos.password_actual
-    ).await?
+    let Some(autenticado) =
+        auth::verificar_credenciales(&state.pool, &datos.usuario, &datos.password_actual).await?
     else {
         return Err(ApiError::CredencialesInvalidas);
     };
@@ -105,7 +107,6 @@ pub async fn change_password(
     if autenticado.id != session.usuario_id {
         return Err(ApiError::CredencialesInvalidas);
     }
-
 
     let hash = hashear(&datos.password_nueva)?;
     let mut tx = state.pool.begin().await.map_err(ServiceError::from)?;
@@ -125,5 +126,109 @@ pub async fn change_password(
 
     tx.commit().await.map_err(ServiceError::from)?;
 
+    // Las sesiones vivas son una foto del login y siguen con el flag en true, lo
+    // que dejaría al usuario bloqueado en bucle. Se cierran para que vuelva a
+    // entrar con la contraseña nueva.
+    state.sessions.eliminar_por_usuario(session.usuario_id);
+
     Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sessions::memory::SessionStore;
+    use sqlx::PgPool;
+    use tokio::sync::broadcast;
+
+    fn state_de_prueba() -> AppState {
+        let pool = PgPool::connect_lazy("postgres://user:pass@localhost/db").unwrap();
+        AppState {
+            pool,
+            sessions: SessionStore::new(),
+            eventos: broadcast::Sender::new(100),
+        }
+    }
+
+    fn crear_sesion(state: &AppState) -> Uuid {
+        state.sessions.crear(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Duration::hours(1),
+            Arc::new(HashSet::new()),
+            false,
+        )
+    }
+
+    fn ctx(state: &AppState, token: &str, data: serde_json::Value) -> Ctx {
+        Ctx {
+            state: state.clone(),
+            id: "id-1".into(),
+            user_id: Uuid::nil(),
+            data: data.as_object().cloned().unwrap_or_default(),
+            token: token.into(),
+            permisos: Arc::new(HashSet::new()),
+        }
+    }
+
+    #[tokio::test]
+    async fn logout_cierra_la_sesion_del_token_de_la_peticion() {
+        let state = state_de_prueba();
+        let token = crear_sesion(&state);
+
+        let resp = logout(ctx(&state, &token.to_string(), serde_json::Value::Null)).await;
+
+        assert_eq!(resp.status, 200);
+        assert!(state.sessions.validar(&token).is_none());
+    }
+
+    #[tokio::test]
+    async fn logout_no_cierra_la_sesion_de_otro_desde_el_payload() {
+        let state = state_de_prueba();
+        let victima = crear_sesion(&state);
+        let atacante = crear_sesion(&state);
+
+        // el atacante manda su propio token y el id de sesión ajeno en el payload
+        let resp = logout(ctx(
+            &state,
+            &atacante.to_string(),
+            serde_json::json!({ "token": victima.to_string() }),
+        ))
+        .await;
+
+        assert_eq!(resp.status, 200);
+        assert!(state.sessions.validar(&victima).is_some());
+        assert!(state.sessions.validar(&atacante).is_none());
+    }
+
+    #[tokio::test]
+    async fn logout_sin_sesion_devuelve_401() {
+        let state = state_de_prueba();
+        let victima = crear_sesion(&state);
+
+        // sin token válido, aunque conozca el id de sesión de la víctima
+        let resp = logout(ctx(
+            &state,
+            "sin-sesion",
+            serde_json::json!({ "token": victima.to_string() }),
+        ))
+        .await;
+
+        assert_eq!(resp.status, 401);
+        assert!(state.sessions.validar(&victima).is_some());
+    }
+
+    #[tokio::test]
+    async fn logout_con_token_inexistente_devuelve_401() {
+        let state = state_de_prueba();
+
+        let resp = logout(ctx(
+            &state,
+            &Uuid::new_v4().to_string(),
+            serde_json::Value::Null,
+        ))
+        .await;
+
+        assert_eq!(resp.status, 401);
+    }
 }

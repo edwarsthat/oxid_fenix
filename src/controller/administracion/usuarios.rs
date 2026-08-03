@@ -156,22 +156,18 @@ pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
     match get_permisos_por_cargo(&ctx.state.pool, datos.cargo_id).await {
         Ok(p) => {
             let permisos: Arc<HashSet<String>> = Arc::new(p.into_iter().collect());
-            if let Err(err) = ctx.state.sessions.actualizar_permisos_por_usuario(
+            ctx.state.sessions.actualizar_permisos_por_usuario(
                 usuario_id,
                 datos.cargo_id,
                 permisos,
-            ) {
-                tracing::error!("[usuarios_update] no se refrescaron permisos, expulsando cargo: {err}");
-                if let Err(e) = ctx.state.sessions.eliminar_por_cargo(datos.cargo_id) {
-                    tracing::error!("[usuarios_update] error al expulsar cargo: {e}");
-                }
-            }
+            );
         }
         Err(err) => {
-            tracing::error!("[usuarios_update] no se obtuvieron permisos, expulsando cargo: {err}");
-            if let Err(e) = ctx.state.sessions.eliminar_por_cargo(datos.cargo_id) {
-                tracing::error!("[usuarios_update] error al expulsar cargo: {e}");
-            }
+            tracing::error!(
+                "[usuarios_update] no se obtuvieron permisos del cargo {}, cerrando sesiones de {usuario_id}: {err}",
+                datos.cargo_id
+            );
+            ctx.state.sessions.eliminar_por_usuario(usuario_id);
         }
     }
 
@@ -222,9 +218,7 @@ pub async fn usuarios_delete(ctx: Ctx) -> WsResponse {
         return WsResponse::internal_error(ctx.id, "usuarios_delete", err);
     }
 
-    if let Err(err) = ctx.state.sessions.eliminar_por_usuario(usuario_id) {
-        tracing::error!("[usuarios_delete] no se cerro sesion usuario {usuario_id}: {err}")
-    }
+    ctx.state.sessions.eliminar_por_usuario(usuario_id);
 
     ctx.emit(
         "usuarios",
@@ -280,9 +274,7 @@ pub async fn usuarios_new_password(ctx: Ctx) -> WsResponse {
         return WsResponse::internal_error(ctx.id, "usuarios_newpassword", err);
     }
 
-    if let Err(err) = ctx.state.sessions.eliminar_por_usuario(usuario_id) {
-        tracing::error!("[usuarios_new_password] no se cerro sesion usuario {usuario_id}: {err}")
-    }
+    ctx.state.sessions.eliminar_por_usuario(usuario_id);
 
     return WsResponse::ok(ctx.id, serde_json::json!({"password_temporal": password }));
 }

@@ -2,7 +2,6 @@ use uuid::Uuid;
 
 use crate::{models::audit_logs::AuditLog, services::error::ServiceError};
 
-
 pub async fn create_audit_log<'e, E>(
     executor: E,
     entity_type: &str,

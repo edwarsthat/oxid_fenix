@@ -1,11 +1,12 @@
+use std::time::Duration;
+
 use oxid_fenix::{
-    app::app::{AppState, build_router}, 
-    db::postgres::connect, 
-    error::AppError, 
-    sessions::memory::SessionStore
+    app::app::{AppState, build_router},
+    db::postgres::connect,
+    error::AppError,
+    sessions::memory::SessionStore,
 };
 use tokio::sync::broadcast;
-
 
 #[tokio::main]
 async fn main() {
@@ -15,13 +16,18 @@ async fn main() {
     }
 }
 
-async fn run() -> Result<(), AppError>{
+async fn run() -> Result<(), AppError> {
     tracing_subscriber::fmt::init();
     dotenvy::dotenv().ok();
     let pool = connect().await?;
     let sessions = SessionStore::new();
+    sessions.iniciar_limpieza(Duration::from_secs(300));
     let (eventos_tx, _) = broadcast::channel(100);
-    let state = AppState { pool, sessions, eventos:eventos_tx };
+    let state = AppState {
+        pool,
+        sessions,
+        eventos: eventos_tx,
+    };
     let app = build_router(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;

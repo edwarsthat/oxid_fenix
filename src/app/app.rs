@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     Router,
     extract::{
@@ -10,23 +12,27 @@ use axum::{
 };
 use sqlx::PgPool;
 use tokio::sync::broadcast;
+use uuid::Uuid;
 
 use crate::{
-    app::error::WsError, controller::sistema::auth::{change_password, login}, sessions::memory::{Session, SessionStore},
+    app::error::WsError,
+    controller::sistema::auth::{change_password, login},
+    routes::protocol::Evento,
+    sessions::memory::{Session, SessionStore},
 };
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
     pub sessions: SessionStore,
-    pub eventos: broadcast::Sender<String>,
+    pub eventos: broadcast::Sender<Arc<Evento>>,
 }
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/login", post(login))
-        .route( "/cambiar-password", post(change_password)) 
+        .route("/cambiar-password", post(change_password))
         .route("/ws", get(ws_handler))
         .with_state(state)
 }
@@ -45,12 +51,12 @@ async fn ws_handler(
         Err(err) => return Err(err),
     };
 
-    let session = match resolver_session(&token, &state.sessions) {
-        Ok(session) => session,
+    let (session_id, session) = match resolver_session(&token, &state.sessions) {
+        Ok(par) => par,
         Err(err) => return Err(err),
     };
 
-    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, session)))
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, session_id, session)))
 }
 
 fn extraer_token(headers: &HeaderMap) -> Result<&str, WsError> {
@@ -61,13 +67,15 @@ fn extraer_token(headers: &HeaderMap) -> Result<&str, WsError> {
         .ok_or(WsError::TokenAusente)
 }
 
-fn resolver_session(token: &str, sessions: &SessionStore) -> Result<Session, WsError> {
-    let id = uuid::Uuid::parse_str(token).map_err(|_| WsError::TokenInvalido)?;
-    let session = sessions.validar(&id)?.ok_or(WsError::TokenInvalido)?;
-    Ok(session)
+/// Devuelve también el id de la sesión: el socket lo necesita para revalidar
+/// permisos en cada evento, ya que la copia de `Session` se congela al conectar.
+fn resolver_session(token: &str, sessions: &SessionStore) -> Result<(Uuid, Session), WsError> {
+    let id = Uuid::parse_str(token).map_err(|_| WsError::TokenInvalido)?;
+    let session = sessions.validar(&id).ok_or(WsError::TokenInvalido)?;
+    Ok((id, session))
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState, session: Session) {
+async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, session: Session) {
     println!(
         "[ws] conexión establecida para usuario {} (cargo {})",
         session.usuario_id, session.cargo_id
@@ -81,34 +89,38 @@ async fn handle_socket(socket: WebSocket, state: AppState, session: Session) {
 
     loop {
         tokio::select! {
-            msg = receiver.next() => {
-                match msg {
-                    Some(Ok(Message::Text(text))) => {
-                         let resp = crate::routes::dispatcher::dispatch(&text, &state).await;
-                         let Ok(json) = serde_json::to_string(&resp) else { continue };
-                         if sender.send(Message::Text(json.into())).await.is_err() { break; }
-                    }
-                    Some(Ok(_)) => {}
-                    Some(Err(e)) => {
-                        eprintln!("Error leyendo del socket: {e}");
-                        break;
-                    }
-                    None => {
-                        // El stream terminó, el cliente cerró la conexión
-                        break;
-                    }
+        msg = receiver.next() => {
+            match msg {
+                Some(Ok(Message::Text(text))) => {
+                     let resp = crate::routes::dispatcher::dispatch(&text, &state).await;
+                     let Ok(json) = serde_json::to_string(&resp) else { continue };
+                     if sender.send(Message::Text(json.into())).await.is_err() { break; }
+                }
+                Some(Ok(_)) => {}
+                Some(Err(e)) => {
+                    eprintln!("Error leyendo del socket: {e}");
+                    break;
+                }
+                None => {
+                    // El stream terminó, el cliente cerró la conexión
+                    break;
                 }
             }
+        }
 
-            evento = eventos_rx.recv() => {
-                match evento {
-                    Ok(json) => {
-                        if sender.send(Message::Text(json.into())).await.is_err() { break; }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(_) => break,
+        evento = eventos_rx.recv() => {
+            match evento {
+                Ok(ev) => {
+                    // la sesión pudo revocarse o cambiar de permisos con el socket ya abierto
+                    let Some(sesion) = state.sessions.validar(&session_id) else { break };
+                    if sesion.debe_cambiar_password { continue; }
+                    if !sesion.permisos.contains(&ev.permiso) { continue; }
+                    if sender.send(Message::Text(ev.json.clone().into())).await.is_err() { break; }
                 }
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
             }
+        }
         }
     }
 }
@@ -172,14 +184,13 @@ mod tests {
     fn resolver_session_expirada_es_invalido() {
         // una sesión vencida se trata igual que un token inválido
         let sessions = SessionStore::new();
-        let id = sessions
-            .crear(
-                Uuid::new_v4(),
-                Uuid::new_v4(),
-                Duration::seconds(-1),
-                permisos(&["usuarios.leer"]),
-            )
-            .unwrap();
+        let id = sessions.crear(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Duration::seconds(-1),
+            permisos(&["usuarios.leer"]),
+            false,
+        );
 
         let err = resolver_session(&id.to_string(), &sessions).unwrap_err();
 
@@ -192,12 +203,17 @@ mod tests {
         let usuario_id = Uuid::new_v4();
         let cargo_id = Uuid::new_v4();
         let permisos = permisos(&["usuarios.leer"]);
-        let id = sessions
-            .crear(usuario_id, cargo_id, Duration::hours(1), permisos.clone())
-            .unwrap();
+        let id = sessions.crear(
+            usuario_id,
+            cargo_id,
+            Duration::hours(1),
+            permisos.clone(),
+            false,
+        );
 
-        let session = resolver_session(&id.to_string(), &sessions).unwrap();
+        let (session_id, session) = resolver_session(&id.to_string(), &sessions).unwrap();
 
+        assert_eq!(session_id, id);
         assert_eq!(session.usuario_id, usuario_id);
         assert_eq!(session.cargo_id, cargo_id);
         assert_eq!(session.permisos, permisos);

@@ -1,10 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{
-    models::administracion::usuario::UsuarioListItem,
-    services::error::ServiceError,
-};
+use crate::{models::administracion::usuario::UsuarioListItem, services::error::ServiceError};
 
 pub async fn get_usuarios(pool: &PgPool) -> Result<Vec<UsuarioListItem>, ServiceError> {
     let usuarios = sqlx::query_as!(
@@ -60,12 +57,12 @@ pub async fn update_usuario<'e, E>(
     email: &str,
     usuario: &str,
     cargo_id: Uuid,
-    usuario_id: Uuid
+    usuario_id: Uuid,
 ) -> Result<UsuarioListItem, ServiceError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
-        let usuario = sqlx::query_as!(
+    let usuario = sqlx::query_as!(
         UsuarioListItem,
         r#"
         UPDATE usuarios
@@ -90,36 +87,33 @@ where
     Ok(usuario)
 }
 
-pub async fn soft_delete_usuario<'e, E>(
-    executor: E,
-    usuario_id: Uuid
-) -> Result<(), ServiceError>
+pub async fn soft_delete_usuario<'e, E>(executor: E, usuario_id: Uuid) -> Result<(), ServiceError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-    {
-        sqlx::query_scalar!(
-            r#"
+{
+    sqlx::query_scalar!(
+        r#"
             UPDATE usuarios
             SET activo = FALSE
             WHERE id = $1
             RETURNING id
             "#,
-            usuario_id
-        )
-        .fetch_one(executor)
-        .await
-        .map_err(|err| match err {
-            sqlx::Error::RowNotFound => ServiceError::NotFound("usuario no encontrado".into()),
-            err => ServiceError::from(err),
-        })?;
+        usuario_id
+    )
+    .fetch_one(executor)
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => ServiceError::NotFound("usuario no encontrado".into()),
+        err => ServiceError::from(err),
+    })?;
 
-        Ok(())
-    }
+    Ok(())
+}
 
 pub async fn newpassword_usuario<'e, E>(
     executor: E,
     usuario_id: Uuid,
-    new_password_hash: &str
+    new_password_hash: &str,
 ) -> Result<UsuarioListItem, ServiceError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
@@ -148,7 +142,7 @@ where
 pub async fn self_newpassword_usuario<'e, E>(
     executor: E,
     usuario_id: Uuid,
-    new_password_hash: &str
+    new_password_hash: &str,
 ) -> Result<UsuarioListItem, ServiceError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
@@ -174,11 +168,10 @@ where
     Ok(usuario)
 }
 
-
 pub async fn activar_usuario<'e, E>(
     executor: E,
     usuario_id: Uuid,
-    new_password_hash: &str
+    new_password_hash: &str,
 ) -> Result<UsuarioListItem, ServiceError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,

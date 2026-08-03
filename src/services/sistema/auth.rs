@@ -5,7 +5,6 @@ use crate::{
     models::administracion::usuario::Usuario, security::password, services::error::ServiceError,
 };
 
-
 // Hash argon2 de cualquier contraseña, generado una vez con hashear()
 const DUMMY_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$vBUueYcnLVdWEHGAJXkFjQ$XnRTL9GMlDT4os2lmvc2WJTFH29bXPNZtbJ8n51bw2d";
 
@@ -60,7 +59,6 @@ fn evaluar_credenciales(usuario_opt: Option<Usuario>, password: &str) -> Option<
 
     usuario_opt.filter(|_| is_correct)
 }
-
 
 #[cfg(test)]
 mod tests {

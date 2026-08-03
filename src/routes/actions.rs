@@ -57,8 +57,8 @@ mod tests {
 
     #[test]
     fn parsear_request_json_invalido() {
-        let err = parsear_request("no soy json")
-            .expect_err("un JSON malformado debería devolver error");
+        let err =
+            parsear_request("no soy json").expect_err("un JSON malformado debería devolver error");
 
         assert_eq!(err.status, 400);
         assert_eq!(err.message, "JSON inválido");
@@ -92,4 +92,3 @@ mod tests {
         assert_eq!(err.id, "id-1");
     }
 }
-

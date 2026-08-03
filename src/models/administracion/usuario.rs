@@ -1,7 +1,7 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 use crate::models::validations::ValidacionError;
 
@@ -33,7 +33,6 @@ pub struct UsuarioListItem {
     pub creado_en: DateTime<Utc>,
     pub actualizado_en: DateTime<Utc>,
     pub debe_cambiar_password: bool,
-
 }
 
 #[derive(Debug, Deserialize)]
@@ -207,7 +206,10 @@ mod tests {
             ..add_payload()
         };
 
-        assert_eq!(payload.validar().unwrap_err().mensaje(), "hay campos vacios");
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "hay campos vacios"
+        );
     }
 
     #[test]
@@ -250,11 +252,13 @@ mod tests {
             ..add_payload()
         };
 
-        assert!(payload
-            .validar()
-            .unwrap_err()
-            .mensaje()
-            .contains("100 caracteres"));
+        assert!(
+            payload
+                .validar()
+                .unwrap_err()
+                .mensaje()
+                .contains("100 caracteres")
+        );
     }
 
     #[test]
@@ -264,7 +268,10 @@ mod tests {
             ..add_payload()
         };
 
-        assert_eq!(payload.validar().unwrap_err().mensaje(), "cargo_id no valido");
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "cargo_id no valido"
+        );
     }
 
     #[test]

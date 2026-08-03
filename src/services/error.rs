@@ -14,5 +14,3 @@ pub enum ServiceError {
     #[error("conflicto: {0}")]
     Conflict(String),
 }
-
-

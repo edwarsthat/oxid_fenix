@@ -7,6 +7,11 @@ use crate::app::app::AppState;
 use crate::routes::actions::{parsear_request, partir_segmento};
 use crate::routes::protocol::{Ctx, WsRequest, WsResponse};
 
+/// Acciones `(area, resto)` que siguen disponibles mientras la sesión arrastre
+/// `debe_cambiar_password`. El cambio en sí va por HTTP (`/cambiar-password`),
+/// así que no pasa por aquí y no hace falta listarlo.
+const ACCIONES_PASSWORD_PENDIENTE: &[(&str, &str)] = &[("sistema", "auth:logout")];
+
 pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
     let req: WsRequest = match parsear_request(raw) {
         Ok(req) => req,
@@ -15,10 +20,7 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
 
     //se obtiene la sesion
     let sesion = match Uuid::parse_str(&req.token) {
-        Ok(token) => match state.sessions.validar(&token) {
-            Ok(validacion) => validacion, // Option<Session>
-            Err(_) => None,               // lock envenenado → sin sesión
-        },
+        Ok(token) => state.sessions.validar(&token),
         Err(_) => None, // token mal formado → sin sesión
     };
 
@@ -30,6 +32,13 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
 
     //revisa permisos y autentificacion
     let (permisos, actor_id) = match sesion {
+        // Con la contraseña temporal pendiente la sesión no sirve para nada más:
+        // se corta aquí, en el único punto por el que pasan todas las áreas.
+        Some(s)
+            if s.debe_cambiar_password && !ACCIONES_PASSWORD_PENDIENTE.contains(&(area, resto)) =>
+        {
+            return WsResponse::error(req.id, 403, "debe cambiar la contraseña");
+        }
         Some(s) => (s.permisos, s.usuario_id),
         None if area == "sistema" => (Arc::new(HashSet::new()), Uuid::nil()),
         None => return WsResponse::error(req.id, 401, "no autenticado"),
@@ -57,9 +66,9 @@ mod tests {
     use crate::sessions::memory::SessionStore;
     use chrono::Duration;
     use sqlx::PgPool;
-    use tokio::sync::broadcast;
     use std::collections::HashSet;
     use std::sync::Arc;
+    use tokio::sync::broadcast;
 
     fn permisos(items: &[&str]) -> Arc<HashSet<String>> {
         Arc::new(items.iter().map(|p| p.to_string()).collect())
@@ -77,16 +86,18 @@ mod tests {
     /// State con una sesión viva y los permisos dados; devuelve el token con el
     /// que autenticarse.
     fn state_con_sesion(permitidos: &[&str]) -> (AppState, Uuid) {
+        state_con_sesion_flag(permitidos, false)
+    }
+
+    fn state_con_sesion_flag(permitidos: &[&str], debe_cambiar_password: bool) -> (AppState, Uuid) {
         let state = state_de_prueba();
-        let token = state
-            .sessions
-            .crear(
-                Uuid::new_v4(),
-                Uuid::new_v4(),
-                Duration::hours(1),
-                permisos(permitidos),
-            )
-            .expect("crear la sesión no debería fallar");
+        let token = state.sessions.crear(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Duration::hours(1),
+            permisos(permitidos),
+            debe_cambiar_password,
+        );
 
         (state, token)
     }
@@ -138,6 +149,52 @@ mod tests {
         let resp = dispatch(&raw, &state).await;
 
         assert_eq!(resp.id, "id-3");
+        assert_eq!(resp.status, 200);
+    }
+
+    #[tokio::test]
+    async fn dispatch_con_password_pendiente_bloquea_area_privada() {
+        // tiene el permiso, pero la contraseña temporal sigue sin cambiarse
+        let (state, token) = state_con_sesion_flag(&["cargos:read"], true);
+        let raw = raw("id-5", &token.to_string(), "administracion:cargos:read");
+
+        let resp = dispatch(&raw, &state).await;
+
+        assert_eq!(resp.id, "id-5");
+        assert_eq!(resp.status, 403);
+        assert_eq!(resp.message, "debe cambiar la contraseña");
+    }
+
+    #[tokio::test]
+    async fn dispatch_con_password_pendiente_bloquea_area_publica() {
+        // sistema no revisa permisos, así que el corte tiene que venir del flag
+        let (state, token) = state_con_sesion_flag(&[], true);
+        let raw = raw("id-6", &token.to_string(), "sistema:auth:usuario:listar");
+
+        let resp = dispatch(&raw, &state).await;
+
+        assert_eq!(resp.status, 403);
+        assert_eq!(resp.message, "debe cambiar la contraseña");
+    }
+
+    #[tokio::test]
+    async fn dispatch_con_password_pendiente_permite_logout() {
+        let (state, token) = state_con_sesion_flag(&[], true);
+        let raw = raw("id-7", &token.to_string(), "sistema:auth:logout");
+
+        let resp = dispatch(&raw, &state).await;
+
+        assert_eq!(resp.status, 200);
+        assert!(state.sessions.validar(&token).is_none());
+    }
+
+    #[tokio::test]
+    async fn dispatch_sin_password_pendiente_no_bloquea() {
+        let (state, token) = state_con_sesion_flag(&[], false);
+        let raw = raw("id-8", &token.to_string(), "sistema:auth:usuario:listar");
+
+        let resp = dispatch(&raw, &state).await;
+
         assert_eq!(resp.status, 200);
     }
 

@@ -7,11 +7,7 @@ use crate::seeds::error::SeedError;
 const ACCIONES: &[&str] = &["add", "read", "update", "delete"];
 
 /// Módulos del sistema. Agregar uno nuevo = una línea aquí.
-const MODULOS: &[&str] = &[
-    "usuarios",
-    "cargos",
-    "permisos"
-];
+const MODULOS: &[&str] = &["usuarios", "cargos", "permisos", "operarios"];
 
 /// Siembra el producto módulos × acciones. Idempotente.
 pub async fn seed(pool: &PgPool) -> Result<(), SeedError> {
@@ -33,6 +29,9 @@ pub async fn seed(pool: &PgPool) -> Result<(), SeedError> {
             .await?;
         }
     }
-    println!("[seed::permisos] permisos sembrados ({} módulos)", MODULOS.len());
+    println!(
+        "[seed::permisos] permisos sembrados ({} módulos)",
+        MODULOS.len()
+    );
     Ok(())
 }

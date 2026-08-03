@@ -1,4 +1,3 @@
-
 use oxid_fenix::{db::postgres::connect, seeds};
 
 #[tokio::main]

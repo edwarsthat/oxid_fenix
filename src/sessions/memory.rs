@@ -1,10 +1,9 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use chrono::{DateTime, Duration, Utc};
 use uuid::Uuid;
-
-use crate::sessions::error::SessionError;
 
 #[derive(Clone, Debug)]
 pub struct Session {
@@ -12,6 +11,7 @@ pub struct Session {
     pub cargo_id: Uuid,
     pub expira_en: DateTime<Utc>,
     pub permisos: Arc<HashSet<String>>,
+    pub debe_cambiar_password: bool,
 }
 
 #[derive(Clone, Default)]
@@ -20,6 +20,30 @@ pub struct SessionStore {
 }
 
 impl SessionStore {
+    fn leer(&self) -> RwLockReadGuard<'_, HashMap<Uuid, Session>> {
+        self.inner.read().unwrap_or_else(|e| {
+            Self::avisar_veneno();
+            e.into_inner()
+        })
+    }
+
+    fn escribir(&self) -> RwLockWriteGuard<'_, HashMap<Uuid, Session>> {
+        self.inner.write().unwrap_or_else(|e| {
+            Self::avisar_veneno();
+            e.into_inner()
+        })
+    }
+
+    fn avisar_veneno() {
+        static AVISADO: AtomicBool = AtomicBool::new(false);
+        if !AVISADO.swap(true, Ordering::Relaxed) {
+            tracing::error!(
+                "el lock de sesiones quedó envenenado: hubo un panic con el lock tomado. \
+                 Se continúa operando; revisa los logs de panic."
+            );
+        }
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -30,37 +54,26 @@ impl SessionStore {
         cargo_id: Uuid,
         duracion: Duration,
         permisos: Arc<HashSet<String>>,
-    ) -> Result<Uuid, SessionError> {
+        debe_cambiar_password: bool,
+    ) -> Uuid {
         let id = Uuid::new_v4();
         let session = Session {
             usuario_id,
             cargo_id,
             expira_en: Utc::now() + duracion,
             permisos,
+            debe_cambiar_password,
         };
 
-        let mut mapa = self
-            .inner
-            .write()
-            .map_err(|_| SessionError::LockEnvenenado)?;
-
-        mapa.insert(id, session);
-        Ok(id)
+        self.escribir().insert(id, session);
+        id
     }
 
-    pub fn validar(&self, id: &Uuid) -> Result<Option<Session>, SessionError> {
-        let mut mapa = self
-            .inner
-            .write()
-            .map_err(|_| SessionError::LockEnvenenado)?;
-
+    pub fn validar(&self, id: &Uuid) -> Option<Session> {
+        let mapa = self.leer();
         match mapa.get(id) {
-            Some(s) if s.expira_en > Utc::now() => Ok(Some(s.clone())),
-            Some(_) => {
-                mapa.remove(id); // expirada → la eliminamos
-                Ok(None)
-            }
-            None => Ok(None),
+            Some(s) if s.expira_en > Utc::now() => Some(s.clone()),
+            _ => None,
         }
     }
 
@@ -69,46 +82,63 @@ impl SessionStore {
         usuario_id: Uuid,
         cargo_id: Uuid,
         permisos: Arc<HashSet<String>>,
-    ) -> Result<usize, SessionError> {
-        let mut mapa = self
-            .inner
-            .write()
-            .map_err(|_| SessionError::LockEnvenenado)?;
+    ) -> usize {
+        let mut mapa = self.escribir();
         let mut n = 0;
+        // Nada falible aquí adentro: solo asignaciones y Arc::clone.
         for s in mapa.values_mut().filter(|s| s.usuario_id == usuario_id) {
             s.cargo_id = cargo_id;
             s.permisos = permisos.clone();
             n += 1;
         }
-        Ok(n)
+        n
     }
 
-    pub fn eliminar_por_usuario(&self, usuario_id: Uuid) -> Result<usize, SessionError> {
-        let mut mapa = self
-            .inner
-            .write()
-            .map_err(|_| SessionError::LockEnvenenado)?;
+    pub fn eliminar(&self, id: &Uuid) {
+        self.escribir().remove(id);
+    }
+
+    pub fn eliminar_por_usuario(&self, usuario_id: Uuid) -> usize {
+        let mut mapa = self.escribir();
         let antes = mapa.len();
         mapa.retain(|_, s| s.usuario_id != usuario_id);
-        Ok(antes - mapa.len())
+        antes - mapa.len()
     }
 
-    pub fn eliminar(&self, id: &Uuid) -> Result<(), SessionError> {
-        self.inner
-            .write()
-            .map_err(|_| SessionError::LockEnvenenado)?
-            .remove(id);
-        Ok(())
-    }
-
-    pub fn eliminar_por_cargo(&self, cargo_id:Uuid) -> Result<usize, SessionError> {
-        let mut mapa = self.inner.write().map_err(|_| SessionError::LockEnvenenado)?;
+    pub fn eliminar_por_cargo(&self, cargo_id: Uuid) -> usize {
+        let mut mapa = self.escribir();
         let antes = mapa.len();
         mapa.retain(|_, s| s.cargo_id != cargo_id);
-        Ok(antes - mapa.len()) 
+        antes - mapa.len()
     }
 
+    pub fn limpiar_expiradas(&self) -> usize {
+        let ahora = Utc::now();
+        let mut mapa = self.escribir();
+        let antes = mapa.len();
+        mapa.retain(|_, s| s.expira_en > ahora);
+        antes - mapa.len()
+    }
 
+    pub fn iniciar_limpieza(&self, cada: std::time::Duration) {
+        let store = self.clone(); // Clone barato: es un Arc
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(cada);
+            tick.tick().await; // el primer tick dispara de inmediato; lo descartamos
+
+            loop {
+                tick.tick().await;
+                let n = store.limpiar_expiradas();
+                if n > 0 {
+                    tracing::debug!(sesiones = n, "sesiones expiradas eliminadas");
+                }
+            }
+        });
+    }
+
+    pub fn total(&self) -> usize {
+        self.leer().len()
+    }
 }
 
 #[cfg(test)]
@@ -127,19 +157,40 @@ mod tests {
         let cargo_id = Uuid::new_v4();
         let permisos = permisos(&["usuarios.leer", "usuarios.crear"]);
 
-        let id = store
-            .crear(usuario_id, cargo_id, Duration::hours(1), permisos.clone())
-            .expect("crear deberia devolver un Uuid");
+        let id = store.crear(
+            usuario_id,
+            cargo_id,
+            Duration::hours(1),
+            permisos.clone(),
+            false,
+        );
 
         let session = store
             .validar(&id)
-            .expect("validar no deberia fallar")
             .expect("la sesion deberia existir y no estar expirada");
 
         assert_eq!(session.usuario_id, usuario_id);
         assert_eq!(session.cargo_id, cargo_id);
         assert_eq!(session.permisos, permisos);
         assert!(session.expira_en > Utc::now());
+        assert!(!session.debe_cambiar_password);
+    }
+
+    #[test]
+    fn crear_conserva_debe_cambiar_password() {
+        let store = SessionStore::new();
+
+        let id = store.crear(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Duration::hours(1),
+            permisos(&["usuarios.leer"]),
+            true,
+        );
+
+        let session = store.validar(&id).expect("la sesion existe");
+
+        assert!(session.debe_cambiar_password);
     }
 
     #[test]
@@ -148,18 +199,15 @@ mod tests {
         let usuario_id = Uuid::new_v4();
         let cargo_id = Uuid::new_v4();
 
-        let id = store
-            .crear(
-                usuario_id,
-                cargo_id,
-                Duration::seconds(-1),
-                permisos(&["usuarios.leer"]),
-            )
-            .unwrap();
+        let id = store.crear(
+            usuario_id,
+            cargo_id,
+            Duration::seconds(-1),
+            permisos(&["usuarios.leer"]),
+            false,
+        );
 
-        let session = store.validar(&id).expect("validar no deberia fallar");
-
-        assert!(session.is_none());
+        assert!(store.validar(&id).is_none());
     }
 
     #[test]
@@ -168,20 +216,17 @@ mod tests {
         let usuario_id = Uuid::new_v4();
         let cargo_id = Uuid::new_v4();
 
-        let id = store
-            .crear(
-                usuario_id,
-                cargo_id,
-                Duration::hours(1),
-                permisos(&["usuarios.leer"]),
-            )
-            .expect("no deberia fallar");
+        let id = store.crear(
+            usuario_id,
+            cargo_id,
+            Duration::hours(1),
+            permisos(&["usuarios.leer"]),
+            false,
+        );
 
-        store.eliminar(&id).expect("Deberia borrar sin problema");
+        store.eliminar(&id);
 
-        let session = store.validar(&id).unwrap();
-
-        assert!(session.is_none());
+        assert!(store.validar(&id).is_none());
     }
 
     #[test]
@@ -191,18 +236,15 @@ mod tests {
         let cargo_id = Uuid::new_v4();
         let wrong_id = Uuid::new_v4();
 
-        store
-            .crear(
-                usuario_id,
-                cargo_id,
-                Duration::hours(1),
-                permisos(&["usuarios.leer"]),
-            )
-            .unwrap();
+        store.crear(
+            usuario_id,
+            cargo_id,
+            Duration::hours(1),
+            permisos(&["usuarios.leer"]),
+            false,
+        );
 
-        let session = store.validar(&wrong_id).unwrap();
-
-        assert!(session.is_none());
+        assert!(store.validar(&wrong_id).is_none());
     }
 
     #[test]
@@ -210,9 +252,10 @@ mod tests {
         let store = SessionStore::new();
         let id = Uuid::new_v4();
 
-        store
-            .eliminar(&id)
-            .expect("eliminar deberia ser idempotente");
+        // eliminar es idempotente: borrar algo que no existe no revienta
+        store.eliminar(&id);
+
+        assert_eq!(store.total(), 0);
     }
 
     #[test]
@@ -222,17 +265,71 @@ mod tests {
         let usuario_id = Uuid::new_v4();
         let cargo_id = Uuid::new_v4();
 
-        let id = store
-            .crear(
-                usuario_id,
-                cargo_id,
-                Duration::hours(1),
-                permisos(&["usuarios.leer"]),
-            )
-            .unwrap();
-        assert!(store2.validar(&id).unwrap().is_some());
+        let id = store.crear(
+            usuario_id,
+            cargo_id,
+            Duration::hours(1),
+            permisos(&["usuarios.leer"]),
+            false,
+        );
+        assert!(store2.validar(&id).is_some());
 
-        store2.eliminar(&id).unwrap();
-        assert!(store.validar(&id).unwrap().is_none());
+        store2.eliminar(&id);
+        assert!(store.validar(&id).is_none());
+    }
+
+    #[test]
+    fn el_store_sigue_operativo_tras_un_panico_con_el_lock_tomado() {
+        let store = SessionStore::new();
+        let store2 = store.clone();
+
+        // envenena el lock: pánico con el guard de escritura tomado
+        let anterior = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {})); // silencia el backtrace esperado
+        let _ = std::thread::spawn(move || {
+            let _guard = store2.inner.write().unwrap();
+            panic!("envenena el lock");
+        })
+        .join();
+        std::panic::set_hook(anterior);
+
+        // antes de recuperar el guard, todo lo de abajo fallaba para siempre
+        let id = store.crear(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Duration::hours(1),
+            permisos(&["usuarios.leer"]),
+            false,
+        );
+
+        assert!(store.validar(&id).is_some());
+        assert_eq!(store.eliminar_por_cargo(Uuid::new_v4()), 0);
+        assert!(store.validar(&id).is_some());
+    }
+
+    #[test]
+    fn limpiar_expiradas_borra_solo_las_vencidas() {
+        let store = SessionStore::new();
+
+        let viva = store.crear(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Duration::hours(1),
+            permisos(&[]),
+            false,
+        );
+        let vencida = store.crear(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Duration::seconds(-1),
+            permisos(&[]),
+            false,
+        );
+
+        assert_eq!(store.total(), 2);
+        assert_eq!(store.limpiar_expiradas(), 1);
+        assert_eq!(store.total(), 1);
+        assert!(store.validar(&viva).is_some());
+        assert!(store.validar(&vencida).is_none());
     }
 }

@@ -1,6 +1,6 @@
 pub mod auth;
 
-use crate::routes::{protocol::{Ctx, WsResponse}};
+use crate::routes::protocol::{Ctx, WsResponse};
 
 /// Router del área `sistema`. Reparte por dominio.
 /// resto: "auth:usuario:listar" -> dominio="auth", resto="usuario:listar"
@@ -21,21 +21,25 @@ mod tests {
     use super::*;
     use crate::{app::app::AppState, sessions::memory::SessionStore};
     use sqlx::PgPool;
-    use uuid::Uuid;
     use std::collections::HashSet;
     use std::sync::Arc;
     use tokio::sync::broadcast;
+    use uuid::Uuid;
 
     fn ctx_de_prueba(id: &str) -> Ctx {
         // connect_lazy no abre conexión real: sirve porque estas rutas no tocan el pool
         let pool = PgPool::connect_lazy("postgres://user:pass@localhost/db").unwrap();
         Ctx {
-            state: AppState { pool, sessions: SessionStore::new(), eventos: broadcast::Sender::new(100) },
+            state: AppState {
+                pool,
+                sessions: SessionStore::new(),
+                eventos: broadcast::Sender::new(100),
+            },
             id: id.to_string(),
             data: serde_json::Map::new(),
             token: "token-de-prueba".to_string(),
             permisos: Arc::new(HashSet::new()),
-            user_id: Uuid::new_v4()
+            user_id: Uuid::new_v4(),
         }
     }
 

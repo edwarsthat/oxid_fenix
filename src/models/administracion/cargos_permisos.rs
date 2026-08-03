@@ -1,7 +1,6 @@
 use serde::Serialize;
-use uuid::Uuid;
 use sqlx::FromRow;
-
+use uuid::Uuid;
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct CargosPermisos {

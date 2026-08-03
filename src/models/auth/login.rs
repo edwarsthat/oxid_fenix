@@ -1,6 +1,4 @@
-
-use crate::models::validations::{Validar, ValidacionError};
-
+use crate::models::validations::{ValidacionError, Validar};
 
 #[derive(serde::Deserialize)]
 pub struct LoginInput {
@@ -8,7 +6,6 @@ pub struct LoginInput {
     pub password: String,
 }
 use serde::Deserialize;
-
 
 /// El mínimo es la única regla de fuerza que imponemos: exigir símbolos y
 /// mayúsculas empuja a la gente a anotar la clave al lado del monitor. El

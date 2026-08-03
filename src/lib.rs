@@ -1,10 +1,10 @@
-pub mod db;
-pub mod models;
-pub mod error;
 pub mod app;
-pub mod routes;
 pub mod controller;
+pub mod db;
+pub mod error;
+pub mod models;
+pub mod routes;
 pub mod security;
 pub mod seeds;
-pub mod sessions;
 pub mod services;
+pub mod sessions;

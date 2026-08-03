@@ -74,7 +74,7 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
         }
         "usuarios:reactivar" => {
             if !ctx.permisos.contains("usuarios:update") {
-                return WsResponse::error(ctx.id, 403, "sin permiso")
+                return WsResponse::error(ctx.id, 403, "sin permiso");
             }
             controller::usuarios::usuarios_activar(ctx).await
         }

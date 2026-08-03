@@ -3,7 +3,9 @@ use std::{collections::HashSet, sync::Arc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{app::app::AppState, models::validations::ValidacionError, services::error::ServiceError};
+use crate::{
+    app::app::AppState, models::validations::ValidacionError, services::error::ServiceError,
+};
 
 #[derive(Deserialize, Debug)]
 pub struct WsRequest {
@@ -44,6 +46,11 @@ pub struct Ctx {
     pub permisos: Arc<HashSet<String>>,
 }
 
+pub struct Evento {
+    pub permiso: String,
+    pub json: String,
+}
+
 impl Ctx {
     pub fn emit(&self, event: &str, action: &str, data: serde_json::Value) {
         let evento = WsEvent {
@@ -51,9 +58,12 @@ impl Ctx {
             action: action.into(),
             data,
         };
-        if let Ok(json) = serde_json::to_string(&evento) {
-            let _ = self.state.eventos.send(json);
-        }
+        let Ok(json) = serde_json::to_string(&evento) else {
+            return;
+        };
+        // convención: para escuchar `usuarios:*` hace falta `usuarios:read`
+        let permiso = format!("{event}:read");
+        let _ = self.state.eventos.send(Arc::new(Evento { permiso, json }));
     }
 }
 

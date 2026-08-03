@@ -56,7 +56,7 @@ where
 }
 
 pub async fn sync_cargo_permisos(
-    conn: &mut sqlx::PgConnection,          // ← concreto, no genérico
+    conn: &mut sqlx::PgConnection, // ← concreto, no genérico
     cargo_id: Uuid,
     permisos: Vec<String>,
 ) -> Result<(), ServiceError> {
@@ -76,7 +76,7 @@ pub async fn sync_cargo_permisos(
         cargo_id,
         &permiso_ids
     )
-    .execute(&mut *conn)   // ← reborrow
+    .execute(&mut *conn) // ← reborrow
     .await?;
 
     // 2) inserta los que faltan
@@ -89,7 +89,7 @@ pub async fn sync_cargo_permisos(
         cargo_id,
         &permiso_ids
     )
-    .execute(&mut *conn)   // ← reborrow otra vez
+    .execute(&mut *conn) // ← reborrow otra vez
     .await?;
 
     Ok(())
