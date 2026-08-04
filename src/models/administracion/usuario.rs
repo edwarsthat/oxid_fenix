@@ -80,8 +80,6 @@ fn normalizar(
 ) -> Result<UsuarioDatos, ValidacionError> {
     let nombre = nombre.trim();
     let apellido = apellido.trim();
-    // el email se guarda en minúsculas para que la unicidad no dependa de cómo
-    // lo haya tipeado quien creó la cuenta
     let email = email.trim().to_lowercase();
     let usuario = usuario.trim();
 
