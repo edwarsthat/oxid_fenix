@@ -8,10 +8,12 @@ const ACCIONES: &[&str] = &["add", "read", "update", "delete"];
 
 /// Módulos del sistema. Agregar uno nuevo = una línea aquí.
 const MODULOS: &[&str] = &[
-    "usuarios", "cargos", 
-    "permisos", "operarios",
-    "cargos_personal"
-    ];
+    "usuarios",
+    "cargos",
+    "permisos",
+    "operarios",
+    "cargos_personal",
+];
 
 /// Siembra el producto módulos × acciones. Idempotente.
 pub async fn seed(pool: &PgPool) -> Result<(), SeedError> {

@@ -115,7 +115,7 @@ pub async fn change_password(
 
     create_audit_log(
         &mut *tx,
-        "usuario",
+        "usuarios",
         usuario.id,
         "cambiar_password",
         session.usuario_id,

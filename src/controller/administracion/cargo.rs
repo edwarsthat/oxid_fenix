@@ -78,7 +78,7 @@ pub async fn cargos_add(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = create_audit_log(
         &mut *tx,
-        "cargo",
+        "cargos",
         new_cargo.id,
         "add",
         ctx.user_id,
@@ -147,7 +147,7 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = create_audit_log(
         &mut *tx,
-        "cargo",
+        "cargos",
         updated_cargo.id,
         "update",
         ctx.user_id,
@@ -194,7 +194,7 @@ pub async fn cargos_delete(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = create_audit_log(
         &mut *tx,
-        "cargo",
+        "cargos",
         cargo_id,
         "delete",
         ctx.user_id,

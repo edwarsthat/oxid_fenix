@@ -63,7 +63,7 @@ pub async fn usuarios_add(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = create_audit_log(
         &mut *tx,
-        "usuario",
+        "usuarios",
         nuevo_usuario.id,
         "add",
         ctx.user_id,
@@ -131,7 +131,7 @@ pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = create_audit_log(
         &mut *tx,
-        "usuario",
+        "usuarios",
         usuario_actualizado.id,
         "update",
         ctx.user_id,
@@ -202,7 +202,7 @@ pub async fn usuarios_delete(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = create_audit_log(
         &mut *tx,
-        "usuario",
+        "usuarios",
         usuario_id,
         "delete",
         ctx.user_id,
@@ -258,7 +258,7 @@ pub async fn usuarios_new_password(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = create_audit_log(
         &mut *tx,
-        "usuario",
+        "usuarios",
         usuario.id,
         "reset_password",
         ctx.user_id,
@@ -308,7 +308,7 @@ pub async fn usuarios_activar(ctx: Ctx) -> WsResponse {
 
     if let Err(err) = create_audit_log(
         &mut *tx,
-        "usuario",
+        "usuarios",
         usuario_activado.id,
         "activar",
         ctx.user_id,

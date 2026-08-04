@@ -2,7 +2,7 @@
 CREATE TABLE cargos_personal (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre VARCHAR(80) NOT NULL UNIQUE,
-    tipo_contrato VARCHAR(50),
+    tipo_contrato VARCHAR(50) NOT NULL,
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     activo BOOLEAN NOT NULL DEFAULT TRUE
 );
