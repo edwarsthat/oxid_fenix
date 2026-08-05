@@ -110,3 +110,32 @@ where
 
     Ok(())
 }
+
+pub async fn activar_cargo_personal<'e, E>(
+    executor: E,
+    cargo_id: Uuid,
+) -> Result<CargoPersonal, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let cargo = sqlx::query_as!(
+        CargoPersonal,
+        r#"
+        UPDATE cargos_personal
+        SET activo = TRUE
+        WHERE id = $1 AND activo = FALSE
+        RETURNING id, nombre, tipo_contrato as "tipo_contrato!", creado_en, activo
+        "#,
+        cargo_id
+    )
+    .fetch_one(executor)
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => {
+            ServiceError::NotFound("cargo de personal no encontrado o ya esta activo".into())
+        }
+        err => ServiceError::from(err),
+    })?;
+
+    Ok(cargo)
+}

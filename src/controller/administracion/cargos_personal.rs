@@ -7,7 +7,7 @@ use crate::{
     routes::protocol::{Ctx, WsResponse},
     services::{
         administracion::cargos_personal::{
-            create_cargo_personal, delete_cargo_personal, get_cargo_personal, update_cargo_personal
+            activar_cargo_personal, create_cargo_personal, delete_cargo_personal, get_cargo_personal, update_cargo_personal
         },
         logs::audit_logs::create_audit_log,
     },
@@ -177,4 +177,51 @@ pub async fn cargos_personal_read(ctx: Ctx) -> WsResponse {
         Ok(cargos) => WsResponse::ok(ctx.id, serde_json::json!({ "data": cargos })),
         Err(err) => WsResponse::from_service_error(ctx.id, "cargos_personal_read", err),
     }
+}
+
+pub async fn cargos_personal_activar(ctx: Ctx) -> WsResponse {
+    let cargo_id = match ctx.data.get("cargo_id").and_then(|v| v.as_str()) {
+        Some(cargo_id) => cargo_id,
+        None => return WsResponse::error(ctx.id, 400, "Falta el cargo personal id"),
+    };
+
+    let cargo_id = match Uuid::parse_str(&cargo_id) {
+        Ok(id) => id,
+        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id es un Uuid no valido")
+    };
+
+    let mut tx = match ctx.state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => return WsResponse::internal_error(ctx.id, "cargos_personal_activar", err)
+    };
+
+    let cargo_activado = match activar_cargo_personal(&mut *tx, cargo_id).await {
+        Ok(c) => c,
+        Err(err) => return WsResponse::from_service_error(ctx.id, "cargos_personal_activar", err)
+    };
+
+    if let Err(err) = create_audit_log(
+        &mut *tx,
+        "cargos_personal",
+        cargo_activado.id,
+        "activar",
+        ctx.user_id,
+        Some("administracion"),
+        Some(serde_json::json!({ "cargo_personal": cargo_activado }))
+    ).await {
+        return WsResponse::from_service_error(ctx.id, "cargos_personal_activar", err)
+    }
+
+    if let Err(err) = tx.commit().await {
+        return WsResponse::internal_error(ctx.id, "cargos_personal_activar", err)
+    }
+
+    ctx.emit(
+        "cargos_personal", 
+        "update", 
+        serde_json::json!({ "data": cargo_activado })
+    );
+
+    WsResponse::ok(ctx.id, serde_json::json!({ "data": cargo_activado }))
+
 }
