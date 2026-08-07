@@ -94,6 +94,7 @@ impl WsResponse {
         match err {
             ServiceError::NotFound(msg) => Self::error(id, 404, &msg),
             ServiceError::Conflict(msg) => Self::error(id, 409, &msg),
+            ServiceError::VersionDesactualizada(msg) => Self::error(id, 412, &msg),
             ServiceError::BadRequest(msg) => Self::error(id, 400, &msg),
             err => Self::internal_error(id, ctx, err),
         }

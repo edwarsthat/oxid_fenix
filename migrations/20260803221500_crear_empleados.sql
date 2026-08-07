@@ -18,6 +18,7 @@ CREATE TABLE personal (
     fecha_retiro DATE,
 
     activo BOOLEAN NOT NULL DEFAULT TRUE,
+    version INTEGER NOT NULL DEFAULT 1,
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -31,6 +32,18 @@ ALTER SEQUENCE personal_codigo_seq OWNED BY personal.codigo;
 CREATE INDEX idx_personal_activo ON personal (activo);
 CREATE INDEX idx_personal_cargo ON personal (cargo_id);
 
+-- Función propia: set_actualizado_en() la comparten usuarios y cargos, que no
+-- tienen columna version. Acá el trigger sube la version en cada UPDATE, así
+-- ninguna operación puede olvidarse de hacerlo.
+CREATE OR REPLACE FUNCTION set_actualizado_en_version()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.actualizado_en = NOW();
+    NEW.version = OLD.version + 1;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TRIGGER trg_personal_actualizado_en
 BEFORE UPDATE ON personal
-FOR EACH ROW EXECUTE FUNCTION set_actualizado_en();
+FOR EACH ROW EXECUTE FUNCTION set_actualizado_en_version();

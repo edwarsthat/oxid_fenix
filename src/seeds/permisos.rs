@@ -13,7 +13,7 @@ const MODULOS: &[&str] = &[
     "permisos",
     "operarios",
     "cargos_personal",
-    "personal"
+    "personal",
 ];
 
 /// Siembra el producto módulos × acciones. Idempotente.

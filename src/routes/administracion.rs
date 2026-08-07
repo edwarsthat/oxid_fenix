@@ -120,6 +120,12 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::personal::personal_add(ctx).await
         }
+        "personal:update" => {
+            if !ctx.permisos.contains("personal:update") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::personal::personal_update(ctx).await
+        }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }

@@ -25,7 +25,6 @@ pub trait Validar {
     fn validar(self) -> Result<Self::Datos, ValidacionError>;
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct Rango<T> {
     pub desde: Option<T>,
@@ -39,9 +38,15 @@ pub struct RangoValidado<T> {
 }
 
 impl<T: Copy> RangoValidado<T> {
-    pub fn desde(&self) -> Option<T> { self.desde }
-    pub fn hasta(&self) -> Option<T> { self.hasta }
-    pub fn vacio(&self) -> bool { self.desde.is_none() && self.hasta.is_none() }
+    pub fn desde(&self) -> Option<T> {
+        self.desde
+    }
+    pub fn hasta(&self) -> Option<T> {
+        self.hasta
+    }
+    pub fn vacio(&self) -> bool {
+        self.desde.is_none() && self.hasta.is_none()
+    }
 }
 
 pub fn limpiar_busqueda(texto: &str) -> Option<String> {
@@ -57,6 +62,44 @@ pub fn limpiar_busqueda(texto: &str) -> Option<String> {
             .replace('%', "\\%")
             .replace('_', "\\_"),
     )
+}
+
+/// Texto que la columna exige NOT NULL: recorta, rechaza vacíos y corta antes
+/// de que Postgres devuelva un 22001 (value too long) como error 500.
+pub fn texto_obligatorio(
+    valor: &str,
+    campo: &str,
+    maximo: usize,
+) -> Result<String, ValidacionError> {
+    let valor = valor.trim();
+
+    if valor.is_empty() {
+        return Err(ValidacionError::nuevo(format!(
+            "el campo {campo} no puede estar vacío"
+        )));
+    }
+
+    // VARCHAR(n) en Postgres cuenta caracteres, no bytes.
+    if valor.chars().count() > maximo {
+        return Err(ValidacionError::nuevo(format!(
+            "el campo {campo} no puede superar {maximo} caracteres"
+        )));
+    }
+
+    Ok(valor.to_string())
+}
+
+/// Igual que `texto_obligatorio`, pero un texto en blanco se guarda como NULL
+/// en vez de como cadena vacía.
+pub fn texto_opcional(
+    valor: Option<&str>,
+    campo: &str,
+    maximo: usize,
+) -> Result<Option<String>, ValidacionError> {
+    match valor.map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(valor) => Ok(Some(texto_obligatorio(valor, campo, maximo)?)),
+    }
 }
 
 pub fn limitar(limite: Option<i64>) -> i64 {
@@ -75,8 +118,9 @@ impl<T: PartialOrd> Validar for Rango<T> {
             ));
         }
 
-        Ok(RangoValidado { desde: self.desde, hasta: self.hasta })
+        Ok(RangoValidado {
+            desde: self.desde,
+            hasta: self.hasta,
+        })
     }
-
-    
 }

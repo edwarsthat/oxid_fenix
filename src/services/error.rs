@@ -13,4 +13,9 @@ pub enum ServiceError {
 
     #[error("conflicto: {0}")]
     Conflict(String),
+
+    /// El registro cambió entre el read y el update. Va aparte de `Conflict`
+    /// porque el cliente tiene que recargar, no corregir lo que escribió.
+    #[error("version desactualizada: {0}")]
+    VersionDesactualizada(String),
 }
