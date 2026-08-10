@@ -126,6 +126,18 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::personal::personal_update(ctx).await
         }
+        "personal:delete" => {
+            if !ctx.permisos.contains("personal:delete") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::personal::personal_delete(ctx).await
+        }
+        "personal:reactivar" => {
+            if !ctx.permisos.contains("personal:update") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::personal::personal_activar(ctx).await
+        }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }

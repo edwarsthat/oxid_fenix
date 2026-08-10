@@ -188,3 +188,87 @@ pub async fn update_personal(
         Err(err) => Err(map_conflicto_personal(err)),
     }
 }
+
+/// Baja lógica: marca el retiro en vez de borrar la fila, para no romper las
+/// referencias históricas del empleado.
+///
+/// El retiro queda con la fecha del servidor. El guard `activo = TRUE` evita
+/// que una segunda baja pise la fecha de retiro que ya quedó registrada.
+///
+/// Devuelve la fila y no `()` porque `fecha_retiro` y `version` los decide el
+/// servidor: sin el RETURNING, quien llama no tiene cómo saberlos.
+pub async fn delete_personal<'e, E>(
+    executor: E,
+    empleado_id: Uuid,
+) -> Result<Empleado, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let empleado_retirado = sqlx::query_as!(
+        Empleado,
+        r#"
+        UPDATE personal
+        SET activo = FALSE,
+            fecha_retiro = CURRENT_DATE
+        WHERE id = $1 AND activo = TRUE
+        RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
+                  fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
+                  fecha_retiro, activo, version, creado_en, actualizado_en
+        "#,
+        empleado_id,
+    )
+    .fetch_one(executor)
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => {
+            ServiceError::NotFound("empleado no encontrado o ya está inactivo".into())
+        }
+        // personal_fechas_check: salta si el empleado tiene fecha_ingreso
+        // futura, o sea que hoy sería anterior a su ingreso.
+        err => map_conflicto_personal(err),
+    })?;
+
+    Ok(empleado_retirado)
+}
+
+/// Reingreso: revierte la baja lógica de [`delete_personal`].
+///
+/// `fecha_ingreso` se pisa con la fecha del servidor porque el empleado vuelve
+/// a entrar hoy; la fecha del contrato anterior queda en el audit log. Limpiar
+/// `fecha_retiro` en el mismo SET evita dejar la fila con un retiro anterior al
+/// nuevo ingreso, que `personal_fechas_check` rechazaría.
+///
+/// El guard `activo = FALSE` hace que reactivar dos veces no reinicie la fecha
+/// de ingreso de alguien que ya está trabajando.
+pub async fn activar_personal<'e, E>(
+    executor: E,
+    empleado_id: Uuid,
+) -> Result<Empleado, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let empleado_activado = sqlx::query_as!(
+        Empleado,
+        r#"
+        UPDATE personal
+        SET activo = TRUE,
+            fecha_ingreso = CURRENT_DATE,
+            fecha_retiro = NULL
+        WHERE id = $1 AND activo = FALSE
+        RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
+                  fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
+                  fecha_retiro, activo, version, creado_en, actualizado_en
+        "#,
+        empleado_id,
+    )
+    .fetch_one(executor)
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => {
+            ServiceError::NotFound("empleado no encontrado o ya está activo".into())
+        }
+        err => ServiceError::from(err),
+    })?;
+
+    Ok(empleado_activado)
+}
