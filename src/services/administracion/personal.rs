@@ -78,19 +78,24 @@ pub async fn get_personal(
                fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
                fecha_retiro, activo, version, creado_en, actualizado_en
         FROM personal
-        WHERE activo = $1
-          AND ($2::uuid IS NULL OR cargo_id = $2)
-          AND ($3::text IS NULL
-               OR nombre    ILIKE '%' || $3 || '%'
-               OR apellido  ILIKE '%' || $3 || '%'
-               OR documento ILIKE $3 || '%')
-          AND ($4::date IS NULL OR fecha_ingreso >= $4)
-          AND ($5::date IS NULL OR fecha_ingreso <= $5)
-          AND ($6::date IS NULL OR fecha_retiro >= $6)
-          AND ($7::date IS NULL OR fecha_retiro <= $7)
+        -- Buscar por id es una consulta puntual: pedir empleados concretos y
+        -- no recibirlos por estar retirados sería confuso, así que la lista de
+        -- ids manda sobre el filtro de activo.
+        WHERE ($1::uuid[] IS NOT NULL OR activo = $2)
+          AND ($1::uuid[] IS NULL OR id = ANY($1))
+          AND ($3::uuid IS NULL OR cargo_id = $3)
+          AND ($4::text IS NULL
+               OR nombre    ILIKE '%' || $4 || '%'
+               OR apellido  ILIKE '%' || $4 || '%'
+               OR documento ILIKE $4 || '%')
+          AND ($5::date IS NULL OR fecha_ingreso >= $5)
+          AND ($6::date IS NULL OR fecha_ingreso <= $6)
+          AND ($7::date IS NULL OR fecha_retiro >= $7)
+          AND ($8::date IS NULL OR fecha_retiro <= $8)
         ORDER BY creado_en DESC, id DESC
-        LIMIT $8
+        LIMIT $9
         "#,
+        filtros.empleados_id.as_deref(),
         filtros.activo,
         filtros.cargo_id,
         filtros.busqueda.as_deref(),

@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use chrono::{DateTime, Duration, Utc};
+use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Session {
     pub usuario_id: Uuid,
     pub cargo_id: Uuid,
@@ -138,6 +139,23 @@ impl SessionStore {
 
     pub fn total(&self) -> usize {
         self.leer().len()
+    }
+
+    /// Todas las sesiones vivas, de la más lejana a expirar a la más próxima.
+    ///
+    /// No devuelve la clave del mapa a propósito: esa clave es el token de
+    /// sesión, y exponerla en un listado permitiría suplantar a cualquier
+    /// usuario conectado. Para cerrar sesiones se usa [`Self::eliminar_por_usuario`].
+    pub fn listar(&self) -> Vec<Session> {
+        let ahora = Utc::now();
+        let mut sesiones: Vec<Session> = self
+            .leer()
+            .values()
+            .filter(|s| s.expira_en > ahora)
+            .cloned()
+            .collect();
+        sesiones.sort_unstable_by_key(|s| std::cmp::Reverse(s.expira_en));
+        sesiones
     }
 }
 
@@ -305,6 +323,46 @@ mod tests {
         assert!(store.validar(&id).is_some());
         assert_eq!(store.eliminar_por_cargo(Uuid::new_v4()), 0);
         assert!(store.validar(&id).is_some());
+    }
+
+    #[test]
+    fn listar_omite_las_expiradas_y_ordena_por_vencimiento() {
+        let store = SessionStore::new();
+        let lejana = Uuid::new_v4();
+        let cercana = Uuid::new_v4();
+
+        store.crear(
+            cercana,
+            Uuid::new_v4(),
+            Duration::hours(1),
+            permisos(&[]),
+            false,
+        );
+        store.crear(
+            lejana,
+            Uuid::new_v4(),
+            Duration::hours(5),
+            permisos(&[]),
+            false,
+        );
+        store.crear(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Duration::seconds(-1),
+            permisos(&[]),
+            false,
+        );
+
+        let sesiones = store.listar();
+
+        assert_eq!(sesiones.len(), 2, "la vencida no debe aparecer");
+        assert_eq!(sesiones[0].usuario_id, lejana);
+        assert_eq!(sesiones[1].usuario_id, cercana);
+    }
+
+    #[test]
+    fn listar_sin_sesiones_devuelve_vacio() {
+        assert!(SessionStore::new().listar().is_empty());
     }
 
     #[test]

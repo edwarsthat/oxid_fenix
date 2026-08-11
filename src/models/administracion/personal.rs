@@ -41,6 +41,7 @@ pub enum TipoFecha {
 #[derive(Debug, Deserialize)]
 pub struct PersonalReadPayload {
     pub activo: Option<bool>,
+    pub empleados_id: Option<Vec<String>>,
     pub cargo_id: Option<String>,
     pub busqueda: Option<String>,
     pub fecha: Option<Rango<NaiveDate>>,
@@ -51,6 +52,7 @@ pub struct PersonalReadPayload {
 #[derive(Debug)]
 pub struct PersonalFiltros {
     pub activo: bool,
+    pub empleados_id: Option<Vec<Uuid>>,
     pub cargo_id: Option<Uuid>,
     pub busqueda: Option<String>,
     pub fecha: Option<RangoValidado<NaiveDate>>,
@@ -103,19 +105,39 @@ pub struct PersonalActualizado {
     pub datos: PersonalNuevo,
 }
 
+/// Los filtros por id llegan como texto (el cliente manda JSON), así que el
+/// parseo y su error son los mismos para todos: se resuelven en un solo lugar.
+fn uuid_obligatorio(valor: &str, campo: &str) -> Result<Uuid, ValidacionError> {
+    Uuid::parse_str(valor.trim())
+        .map_err(|_| ValidacionError::nuevo(format!("el {campo} no es un UUID válido")))
+}
+
+fn uuid_opcional(valor: Option<String>, campo: &str) -> Result<Option<Uuid>, ValidacionError> {
+    valor
+        .map(|texto| uuid_obligatorio(&texto, campo))
+        .transpose()
+}
+
 impl Validar for PersonalReadPayload {
     type Datos = PersonalFiltros;
 
     fn validar(self) -> Result<Self::Datos, ValidacionError> {
         let activo = self.activo.unwrap_or(true);
 
-        let cargo_id = match self.cargo_id {
-            Some(texto) => match Uuid::parse_str(texto.trim()) {
-                Ok(id) => Some(id),
-                Err(_) => return Err(ValidacionError::nuevo("el cargo_id no es un UUID válido")),
-            },
-            None => None,
+        // Una lista vacía se trata como "sin filtro": `id = ANY('{}')` no
+        // devolvería nada, y quien manda [] no está pidiendo cero empleados.
+        let empleados_id = match self.empleados_id {
+            Some(lista) if !lista.is_empty() => {
+                let ids = lista
+                    .into_iter()
+                    .map(|texto| uuid_obligatorio(&texto, "empleados_id"))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some(ids)
+            }
+            _ => None,
         };
+
+        let cargo_id = uuid_opcional(self.cargo_id, "cargo_id")?;
 
         let busqueda = match self.busqueda {
             Some(texto) => limpiar_busqueda(&texto),
@@ -141,6 +163,7 @@ impl Validar for PersonalReadPayload {
 
         Ok(PersonalFiltros {
             activo,
+            empleados_id,
             cargo_id,
             busqueda,
             fecha,
