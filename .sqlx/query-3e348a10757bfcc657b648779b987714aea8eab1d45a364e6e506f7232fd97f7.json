@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM cargos_permisos\n        WHERE cargo_id = $1\n          AND permiso_id <> ALL($2::uuid[])\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e348a10757bfcc657b648779b987714aea8eab1d45a364e6e506f7232fd97f7"
+}

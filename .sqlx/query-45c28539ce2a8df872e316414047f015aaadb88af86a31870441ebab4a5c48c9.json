@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO cargos_permisos (cargo_id, permiso_id)\n        SELECT $1, unnest($2::uuid[])\n        ON CONFLICT (cargo_id, permiso_id) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "45c28539ce2a8df872e316414047f015aaadb88af86a31870441ebab4a5c48c9"
+}

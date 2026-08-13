@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT permiso_id\n        FROM cargos_permisos\n        WHERE cargo_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "permiso_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cargos_permisos",
+            "name": "permiso_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3e7fe370f3f701018d3b789bd1f292112372a33118671fa58c8fe0405e0581a2"
+}

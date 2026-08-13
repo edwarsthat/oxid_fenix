@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO cargos (nombre, descripcion)\n        VALUES ($1, $2)\n        RETURNING id, nombre, descripcion, creado_en, activo\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "descripcion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "descripcion"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "activo",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "activo"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "5ee76a354903b5ddc7aaf67e81b8bde5e3236781c4656bef19e8f1cff6ca7f50"
+}

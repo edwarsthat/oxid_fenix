@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE cargos\n        SET nombre = $1, descripcion = $2\n        WHERE id = $3\n        RETURNING id, nombre, descripcion, creado_en, activo\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "descripcion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "descripcion"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "activo",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "cargos",
+            "name": "activo"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "ace709d5770f55af226e11ee7448d588be7b14ba342c15d20cf0d906485b9d94"
+}

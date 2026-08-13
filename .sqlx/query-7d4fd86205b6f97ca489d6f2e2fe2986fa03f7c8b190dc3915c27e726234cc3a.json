@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO cargos_permisos (cargo_id, permiso_id)\n        SELECT $1, unnest($2::uuid[])\n        ON CONFLICT (cargo_id, permiso_id) DO NOTHING\n        RETURNING cargo_id, permiso_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cargo_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cargos_permisos",
+            "name": "cargo_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "permiso_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cargos_permisos",
+            "name": "permiso_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7d4fd86205b6f97ca489d6f2e2fe2986fa03f7c8b190dc3915c27e726234cc3a"
+}

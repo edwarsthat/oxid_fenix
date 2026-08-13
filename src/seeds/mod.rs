@@ -3,6 +3,7 @@ pub mod cargos_permisos;
 pub mod error;
 pub mod permisos;
 pub mod usuarios;
+pub mod cargo_personal;
 
 use sqlx::PgPool;
 
@@ -15,6 +16,7 @@ pub async fn run_all(pool: &PgPool) -> Result<(), SeedError> {
     permisos::seed(pool).await?;
     cargos_permisos::seed(pool).await?;
     usuarios::seed(pool).await?;
+    cargo_personal::seed(pool).await?;
 
     println!("[seed] siembra completada.");
     Ok(())

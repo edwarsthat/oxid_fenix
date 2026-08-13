@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE cargos_personal\n        SET nombre = $1, tipo_contrato = $2\n        WHERE id = $3\n        RETURNING id, nombre, tipo_contrato as \"tipo_contrato!\", creado_en, activo\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cargos_personal",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "cargos_personal",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tipo_contrato!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "cargos_personal",
+            "name": "tipo_contrato"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cargos_personal",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "activo",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "cargos_personal",
+            "name": "activo"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b5d265e9c796f34ff53c8aedcf11a5b6fa1a411535dd0f7c6c7e0b0004d8a58d"
+}
