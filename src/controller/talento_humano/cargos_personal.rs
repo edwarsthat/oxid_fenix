@@ -1,12 +1,12 @@
 use uuid::Uuid;
 
 use crate::{
-    models::administracion::cargos_personal::{
+    models::talento_humano::cargos_personal::{
         CargoPersonalAddPayload, CargoPersonalUpdatePayload,
     },
     routes::protocol::{Ctx, WsResponse},
     services::{
-        administracion::cargos_personal::{
+        talento_humano::cargos_personal::{
             activar_cargo_personal, create_cargo_personal, delete_cargo_personal,
             get_cargo_personal, update_cargo_personal,
         },

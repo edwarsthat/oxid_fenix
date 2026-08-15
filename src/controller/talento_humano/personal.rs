@@ -2,14 +2,14 @@ use uuid::Uuid;
 
 use crate::{
     models::{
-        administracion::personal::{
+        talento_humano::personal::{
             PersonalAddPayload, PersonalReadPayload, PersonalUpdatePayload,
         },
         validations::Validar,
     },
     routes::protocol::{Ctx, WsResponse},
     services::{
-        administracion::personal::{
+        talento_humano::personal::{
             activar_personal, add_personal, delete_personal, get_personal, update_personal,
         },
         logs::audit_logs::create_audit_log,

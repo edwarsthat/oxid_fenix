@@ -2,7 +2,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    models::administracion::cargos_personal::CargoPersonal, services::error::ServiceError,
+    models::talento_humano::cargos_personal::CargoPersonal, services::error::ServiceError,
 };
 
 fn map_conflicto_cargo_personal(err: sqlx::Error) -> ServiceError {

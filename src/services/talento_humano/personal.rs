@@ -2,7 +2,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    models::administracion::personal::{
+    models::talento_humano::personal::{
         Empleado, PersonalActualizado, PersonalFiltros, PersonalNuevo, TipoFecha,
     },
     services::error::ServiceError,
