@@ -10,15 +10,18 @@ const CRUD: &[&str] = &["add", "read", "update", "delete"];
 /// Agregar uno nuevo = una línea aquí. Si el módulo no expone todo el CRUD,
 /// se listan solo sus acciones reales para no sembrar permisos muertos.
 const MODULOS: &[(&str, &[&str])] = &[
+    //administracio
     ("usuarios", CRUD),
     ("cargos", CRUD),
     ("permisos", CRUD),
-    ("operarios", CRUD),
-    ("cargos_personal", CRUD),
-    ("personal", CRUD),
     // Las sesiones no se crean ni se editan desde la administración:
     // solo se listan y se revocan (cerrar sesión de un usuario).
     ("sesiones", &["read", "delete"]),
+    //talento humano
+    ("cargos_personal", CRUD),
+    ("personal", CRUD),
+    //inventarios
+    ("llaves_nfc", CRUD),
 ];
 
 /// Siembra el producto módulos × acciones. Idempotente.

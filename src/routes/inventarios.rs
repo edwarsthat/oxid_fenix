@@ -14,6 +14,18 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::llaves_nfc::llaves_nfc_add(ctx).await
         }
+        "llaves_nfc:read" => {
+            if !ctx.permisos.contains("llaves_nfc:read") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::llaves_nfc::llave_nfc_read(ctx).await
+        }
+        "llaves_nfc:update" => {
+            if !ctx.permisos.contains("llaves_nfc:update") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::llaves_nfc::llave_nfc_update(ctx).await
+        }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }
