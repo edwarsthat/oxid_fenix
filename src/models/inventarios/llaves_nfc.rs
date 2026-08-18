@@ -4,14 +4,14 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::models::validations::{
-    ValidacionError, Validar, limitar, limpiar_busqueda, texto_opcional,
+    limitar, limpiar_busqueda, texto_opcional, ValidacionError, Validar,
 };
 
 const LARGOS_UID: [usize; 3] = [8, 14, 20];
 
 /// Estados válidos de `llaves_nfc.estado`. Es la misma lista del CHECK de la
 /// migración: si cambia una, cambia la otra.
-const ESTADOS: [&str; 4] = ["inventario", "perdida", "dañada", "baja"];
+const ESTADOS: [&str; 5] = ["inventario", "perdida", "dañada", "baja"];
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct LlaveNfc {
