@@ -163,9 +163,6 @@ pub async fn controller_asignar_llave(ctx: Ctx) -> WsResponse {
         Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
-    // El uid se copia antes de que `datos` se consuma: la fila guarda `llave_id`
-    // y el log queda más útil con la tarjeta que efectivamente leyó el lector,
-    // sin tener que salir a buscarla por id.
     let uid = datos.uid.clone();
 
     let mut tx = match ctx.state.pool.begin().await {
@@ -178,8 +175,6 @@ pub async fn controller_asignar_llave(ctx: Ctx) -> WsResponse {
         Err(err) => return WsResponse::from_service_error(ctx.id, "asignaciones_llave", err),
     };
 
-    // `asignar` y no `add`, igual que `activar` en personal: la acción que hay
-    // que poder rastrear después es la entrega, no el alta de una fila.
     if let Err(err) = create_audit_log(
         &mut *tx,
         "asignaciones_llave",

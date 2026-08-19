@@ -27,6 +27,13 @@ pub struct Empleado {
     pub version: i32,
     pub creado_en: DateTime<Utc>,
     pub actualizado_en: DateTime<Utc>,
+
+    //El id de la asignacion
+    pub asignacion_id: Option<Uuid>,
+    pub llave_id: Option<Uuid>,
+    pub llave_codigo: Option<String>,
+    pub llave_uid: Option<String>,
+    pub asignado_en: Option<DateTime<Utc>>,
 }
 
 /// Sobre qué columna de fecha aplica el rango `fecha`.

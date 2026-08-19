@@ -34,6 +34,16 @@ pub struct AsignacionLlaveNueva {
     pub uid: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AsignacionQuitarLlavePayload {
+    pub asignacion_id: Uuid,
+}
+
+#[derive(Debug)]
+pub struct AsignacionQuitarLlaveData {
+    pub asignacion_id: Uuid,
+}
+
 impl Validar for AsignacionLlaveAddPayload {
     type Datos = AsignacionLlaveNueva;
 
@@ -43,6 +53,16 @@ impl Validar for AsignacionLlaveAddPayload {
         Ok(AsignacionLlaveNueva {
             uid,
             empleado_id: self.empleado_id,
+        })
+    }
+}
+
+impl Validar for AsignacionQuitarLlavePayload {
+    type Datos = AsignacionQuitarLlaveData;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        Ok(AsignacionQuitarLlaveData {
+            asignacion_id: self.asignacion_id,
         })
     }
 }

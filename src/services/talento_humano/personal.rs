@@ -74,25 +74,38 @@ pub async fn get_personal(
     let personal = sqlx::query_as!(
         Empleado,
         r#"
-        SELECT id, codigo, tipo_documento, documento, nombre, apellido,
-               fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
-               fecha_retiro, activo, version, creado_en, actualizado_en
-        FROM personal
+        SELECT p.id, p.codigo, p.tipo_documento, p.documento, p.nombre, p.apellido,
+               p.fecha_nacimiento, p.telefono, p.cargo_id, p.fecha_ingreso,
+               p.fecha_retiro, p.activo, p.version, p.creado_en, p.actualizado_en,
+               -- El `?` es obligatorio: son columnas NOT NULL en su tabla, así
+               -- que sin él sqlx las tipa sin Option y el primer empleado sin
+               -- llave revienta al mapear.
+               a.id          AS "asignacion_id?",
+               a.llave_id    AS "llave_id?",
+               l.codigo      AS "llave_codigo?",
+               l.uid         AS "llave_uid?",
+               a.asignada_en AS "asignado_en?"
+        FROM personal p
+        -- `ux_asignaciones_empleado_activa` garantiza a lo sumo una asignación
+        -- sin devolver por empleado, así que el LEFT JOIN no duplica filas.
+        LEFT JOIN asignaciones_llave a
+               ON a.empleado_id = p.id AND a.devuelta_en IS NULL
+        LEFT JOIN llaves_nfc l ON l.id = a.llave_id
         -- Buscar por id es una consulta puntual: pedir empleados concretos y
         -- no recibirlos por estar retirados sería confuso, así que la lista de
         -- ids manda sobre el filtro de activo.
-        WHERE ($1::uuid[] IS NOT NULL OR activo = $2)
-          AND ($1::uuid[] IS NULL OR id = ANY($1))
-          AND ($3::uuid IS NULL OR cargo_id = $3)
+        WHERE ($1::uuid[] IS NOT NULL OR p.activo = $2)
+          AND ($1::uuid[] IS NULL OR p.id = ANY($1))
+          AND ($3::uuid IS NULL OR p.cargo_id = $3)
           AND ($4::text IS NULL
-               OR nombre    ILIKE '%' || $4 || '%'
-               OR apellido  ILIKE '%' || $4 || '%'
-               OR documento ILIKE $4 || '%')
-          AND ($5::date IS NULL OR fecha_ingreso >= $5)
-          AND ($6::date IS NULL OR fecha_ingreso <= $6)
-          AND ($7::date IS NULL OR fecha_retiro >= $7)
-          AND ($8::date IS NULL OR fecha_retiro <= $8)
-        ORDER BY creado_en DESC, id DESC
+               OR p.nombre    ILIKE '%' || $4 || '%'
+               OR p.apellido  ILIKE '%' || $4 || '%'
+               OR p.documento ILIKE $4 || '%')
+          AND ($5::date IS NULL OR p.fecha_ingreso >= $5)
+          AND ($6::date IS NULL OR p.fecha_ingreso <= $6)
+          AND ($7::date IS NULL OR p.fecha_retiro >= $7)
+          AND ($8::date IS NULL OR p.fecha_retiro <= $8)
+        ORDER BY p.creado_en DESC, p.id DESC
         LIMIT $9
         "#,
         filtros.empleados_id.as_deref(),
@@ -128,7 +141,14 @@ where
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
                   fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
-                  fecha_retiro, activo, version, creado_en, actualizado_en
+                  fecha_retiro, activo, version, creado_en, actualizado_en,
+                  -- Un empleado recién creado no puede tener llave asignada:
+                  -- acá los NULL son el dato real, no un placeholder.
+                  NULL::uuid        AS "asignacion_id?",
+                  NULL::uuid        AS "llave_id?",
+                  NULL::varchar     AS "llave_codigo?",
+                  NULL::varchar     AS "llave_uid?",
+                  NULL::timestamptz AS "asignado_en?"
         "#,
         datos.tipo_documento,
         datos.documento,
@@ -163,13 +183,31 @@ pub async fn update_personal(
     let resultado = sqlx::query_as!(
         Empleado,
         r#"
-        UPDATE personal
-        SET tipo_documento = $3, documento = $4, nombre = $5, apellido = $6,
-            fecha_nacimiento = $7, telefono = $8, cargo_id = $9, fecha_ingreso = $10
-        WHERE id = $1 AND version = $2
-        RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
-                  fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
-                  fecha_retiro, activo, version, creado_en, actualizado_en
+        WITH empleado AS (
+            UPDATE personal
+            SET tipo_documento = $3, documento = $4, nombre = $5, apellido = $6,
+                fecha_nacimiento = $7, telefono = $8, cargo_id = $9, fecha_ingreso = $10
+            WHERE id = $1 AND version = $2
+            RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
+                      fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
+                      fecha_retiro, activo, version, creado_en, actualizado_en
+        )
+        SELECT e.id AS "id!", e.codigo AS "codigo!",
+               e.tipo_documento AS "tipo_documento!", e.documento AS "documento!",
+               e.nombre AS "nombre!", e.apellido AS "apellido!",
+               e.fecha_nacimiento, e.telefono, e.cargo_id AS "cargo_id!",
+               e.fecha_ingreso AS "fecha_ingreso!", e.fecha_retiro,
+               e.activo AS "activo!", e.version AS "version!",
+               e.creado_en AS "creado_en!", e.actualizado_en AS "actualizado_en!",
+               a.id          AS "asignacion_id?",
+               a.llave_id    AS "llave_id?",
+               l.codigo      AS "llave_codigo?",
+               l.uid         AS "llave_uid?",
+               a.asignada_en AS "asignado_en?"
+        FROM empleado e
+        LEFT JOIN asignaciones_llave a
+               ON a.empleado_id = e.id AND a.devuelta_en IS NULL
+        LEFT JOIN llaves_nfc l ON l.id = a.llave_id
         "#,
         empleado_id,
         version,
@@ -212,13 +250,31 @@ where
     let empleado_retirado = sqlx::query_as!(
         Empleado,
         r#"
-        UPDATE personal
-        SET activo = FALSE,
-            fecha_retiro = CURRENT_DATE
-        WHERE id = $1 AND activo = TRUE
-        RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
-                  fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
-                  fecha_retiro, activo, version, creado_en, actualizado_en
+        WITH empleado AS (
+            UPDATE personal
+            SET activo = FALSE,
+                fecha_retiro = CURRENT_DATE
+            WHERE id = $1 AND activo = TRUE
+            RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
+                      fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
+                      fecha_retiro, activo, version, creado_en, actualizado_en
+        )
+        SELECT e.id AS "id!", e.codigo AS "codigo!",
+               e.tipo_documento AS "tipo_documento!", e.documento AS "documento!",
+               e.nombre AS "nombre!", e.apellido AS "apellido!",
+               e.fecha_nacimiento, e.telefono, e.cargo_id AS "cargo_id!",
+               e.fecha_ingreso AS "fecha_ingreso!", e.fecha_retiro,
+               e.activo AS "activo!", e.version AS "version!",
+               e.creado_en AS "creado_en!", e.actualizado_en AS "actualizado_en!",
+               a.id          AS "asignacion_id?",
+               a.llave_id    AS "llave_id?",
+               l.codigo      AS "llave_codigo?",
+               l.uid         AS "llave_uid?",
+               a.asignada_en AS "asignado_en?"
+        FROM empleado e
+        LEFT JOIN asignaciones_llave a
+               ON a.empleado_id = e.id AND a.devuelta_en IS NULL
+        LEFT JOIN llaves_nfc l ON l.id = a.llave_id
         "#,
         empleado_id,
     )
@@ -255,14 +311,32 @@ where
     let empleado_activado = sqlx::query_as!(
         Empleado,
         r#"
-        UPDATE personal
-        SET activo = TRUE,
-            fecha_ingreso = CURRENT_DATE,
-            fecha_retiro = NULL
-        WHERE id = $1 AND activo = FALSE
-        RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
-                  fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
-                  fecha_retiro, activo, version, creado_en, actualizado_en
+        WITH empleado AS (
+            UPDATE personal
+            SET activo = TRUE,
+                fecha_ingreso = CURRENT_DATE,
+                fecha_retiro = NULL
+            WHERE id = $1 AND activo = FALSE
+            RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
+                      fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
+                      fecha_retiro, activo, version, creado_en, actualizado_en
+        )
+        SELECT e.id AS "id!", e.codigo AS "codigo!",
+               e.tipo_documento AS "tipo_documento!", e.documento AS "documento!",
+               e.nombre AS "nombre!", e.apellido AS "apellido!",
+               e.fecha_nacimiento, e.telefono, e.cargo_id AS "cargo_id!",
+               e.fecha_ingreso AS "fecha_ingreso!", e.fecha_retiro,
+               e.activo AS "activo!", e.version AS "version!",
+               e.creado_en AS "creado_en!", e.actualizado_en AS "actualizado_en!",
+               a.id          AS "asignacion_id?",
+               a.llave_id    AS "llave_id?",
+               l.codigo      AS "llave_codigo?",
+               l.uid         AS "llave_uid?",
+               a.asignada_en AS "asignado_en?"
+        FROM empleado e
+        LEFT JOIN asignaciones_llave a
+               ON a.empleado_id = e.id AND a.devuelta_en IS NULL
+        LEFT JOIN llaves_nfc l ON l.id = a.llave_id
         "#,
         empleado_id,
     )
