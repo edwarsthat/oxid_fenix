@@ -1,11 +1,16 @@
 use crate::{
     models::{
-        inventarios::llaves_nfc::{LlaveNfcAddPayload, LlaveNfcReadPayload, LlaveNfcUpdatePayload},
+        inventarios::{
+            asignaciones_llave::AsignacionLlaveAddPayload,
+            llaves_nfc::{LlaveNfcAddPayload, LlaveNfcReadPayload, LlaveNfcUpdatePayload},
+        },
         validations::Validar,
     },
     routes::protocol::{Ctx, WsResponse},
     services::{
-        inventarios::llaves_nfc::{add_llave_nfc, get_llaves_nfc, update_llave_nfc},
+        inventarios::llaves_nfc::{
+            add_llave_nfc, create_asignaciones_llave, get_llaves_nfc, update_llave_nfc,
+        },
         logs::audit_logs::create_audit_log,
     },
 };
@@ -142,4 +147,70 @@ pub async fn llave_nfc_update(ctx: Ctx) -> WsResponse {
     );
 
     WsResponse::ok(ctx.id, serde_json::json!({ "data": llave_nfc_actualizado }))
+}
+
+pub async fn controller_asignar_llave(ctx: Ctx) -> WsResponse {
+    let payload: AsignacionLlaveAddPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => {
+                return WsResponse::error(ctx.id, 400, &format!("Payloaod invalido: {err}"));
+            }
+        };
+
+    let datos = match payload.validar() {
+        Ok(datos) => datos,
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
+    };
+
+    // El uid se copia antes de que `datos` se consuma: la fila guarda `llave_id`
+    // y el log queda más útil con la tarjeta que efectivamente leyó el lector,
+    // sin tener que salir a buscarla por id.
+    let uid = datos.uid.clone();
+
+    let mut tx = match ctx.state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => return WsResponse::internal_error(ctx.id, "asignaciones_llave", err),
+    };
+
+    let asignacion_nueva = match create_asignaciones_llave(&mut *tx, datos).await {
+        Ok(asignacion) => asignacion,
+        Err(err) => return WsResponse::from_service_error(ctx.id, "asignaciones_llave", err),
+    };
+
+    // `asignar` y no `add`, igual que `activar` en personal: la acción que hay
+    // que poder rastrear después es la entrega, no el alta de una fila.
+    if let Err(err) = create_audit_log(
+        &mut *tx,
+        "asignaciones_llave",
+        asignacion_nueva.id,
+        "asignar",
+        ctx.user_id,
+        Some("inventarios"),
+        Some(serde_json::json!({
+            "llave_id": asignacion_nueva.llave_id,
+            "uid": uid,
+            "empleado_id": asignacion_nueva.empleado_id,
+            "asignada_en": asignacion_nueva.asignada_en,
+        })),
+    )
+    .await
+    {
+        return WsResponse::from_service_error(ctx.id, "asignaciones_llave", err);
+    }
+
+    if let Err(err) = tx.commit().await {
+        return WsResponse::internal_error(ctx.id, "asignaciones_llave", err);
+    }
+
+    // Va bajo el evento `llaves_nfc` y no `asignaciones_llave` porque `emit`
+    // arma el filtro como `{event}:read` y el único permiso sembrado para esto
+    // es `llaves_nfc:read`; con el otro nombre el evento no le llegaría a nadie.
+    ctx.emit(
+        "llaves_nfc",
+        "asignar",
+        serde_json::json!({ "data": asignacion_nueva }),
+    );
+
+    WsResponse::ok(ctx.id, serde_json::json!({ "data": asignacion_nueva }))
 }

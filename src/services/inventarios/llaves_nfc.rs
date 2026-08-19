@@ -2,8 +2,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    models::inventarios::llaves_nfc::{
-        LlaveNfc, LlaveNfcActualizado, LlaveNfcFiltros, LlaveNfcNueva,
+    models::inventarios::{
+        asignaciones_llave::{AsignacionLlave, AsignacionLlaveNueva},
+        llaves_nfc::{LlaveNfc, LlaveNfcActualizado, LlaveNfcFiltros, LlaveNfcNueva},
     },
     services::error::ServiceError,
 };
@@ -160,4 +161,75 @@ pub async fn update_llave_nfc(
         Err(sqlx::Error::RowNotFound) => Err(distinguir_fallo_update(conexion, llave_nfc_id).await),
         Err(err) => Err(map_conflicto_llave_nfc(err)),
     }
+}
+
+/// Traduce los errores de integridad de `asignaciones_llave`. Los tres casos
+/// que se cruzan acá son de negocio, no fallas: la llave ya está en manos de
+/// alguien, el empleado ya tiene una, o el empleado no existe.
+fn map_conflicto_asignacion(err: sqlx::Error) -> ServiceError {
+    if let sqlx::Error::Database(db_err) = &err {
+        match db_err.code().as_deref() {
+            // Los dos UNIQUE son parciales (solo filas con devuelta_en NULL) y
+            // Postgres reporta el nombre del índice: hay que decir cuál de las
+            // dos puntas está ocupada para que el mensaje sirva de algo.
+            Some("23505") => {
+                let mensaje = match db_err.constraint() {
+                    Some("ux_asignaciones_empleado_activa") => {
+                        "el empleado ya tiene una llave asignada"
+                    }
+                    _ => "la llave ya está asignada a otro empleado",
+                };
+                return ServiceError::Conflict(mensaje.into());
+            }
+            // La FK de llave_id no puede fallar: el id sale del SELECT de la
+            // misma consulta. La que queda es la del empleado.
+            Some("23503") => {
+                return ServiceError::NotFound("el empleado no existe".into());
+            }
+            _ => {}
+        }
+    }
+    ServiceError::from(err)
+}
+
+/// Entrega una llave a un empleado. El payload trae el `uid` que leyó el
+/// lector, no el id: la llave se resuelve dentro del mismo INSERT ... SELECT
+/// para no gastar una consulta previa y para que el executor genérico alcance.
+///
+/// `asignada_en` y `creado_en` los pone la tabla; `devuelta_en` y
+/// `motivo_devolucion` nacen NULL, que es lo que marca la asignación activa
+/// para los índices parciales.
+pub async fn create_asignaciones_llave<'e, E>(
+    executor: E,
+    datos: AsignacionLlaveNueva,
+) -> Result<AsignacionLlave, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let asignacion = sqlx::query_as!(
+        AsignacionLlave,
+        r#"
+        INSERT INTO asignaciones_llave (llave_id, empleado_id)
+        SELECT id, $2::uuid
+        FROM llaves_nfc
+        WHERE uid = $1
+        RETURNING id, llave_id, empleado_id, asignada_en, devuelta_en,
+                  motivo_devolucion, creado_en
+        "#,
+        datos.uid,
+        datos.empleado_id,
+    )
+    .fetch_one(executor)
+    .await
+    .map_err(|err| match err {
+        // Si el uid no existe el SELECT no devuelve filas, así que no se
+        // inserta nada y el RETURNING vuelve vacío: no es una falla de la
+        // consulta, es una tarjeta que no está registrada.
+        sqlx::Error::RowNotFound => {
+            ServiceError::NotFound("no existe una llave registrada con ese uid".into())
+        }
+        err => map_conflicto_asignacion(err),
+    })?;
+
+    Ok(asignacion)
 }
