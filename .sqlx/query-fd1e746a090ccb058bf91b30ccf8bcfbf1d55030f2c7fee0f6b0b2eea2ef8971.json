@@ -1,0 +1,134 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT ln.id, ln.uid, ln.codigo, ln.estado, ln.descripcion, ln.version,\n               ln.creado_en, ln.actualizado_en,\n               p.codigo AS \"empleado_codigo?\",\n               -- El read no cierra asignaciones; la columna existe solo para\n               -- que el struct sea el mismo en las tres consultas.\n               NULL::uuid AS \"asignacion_cerrada_id?\"\n        FROM llaves_nfc ln\n        -- `devuelta_en IS NULL` trae la asignación vigente y no todo el\n        -- historial; `ux_asignaciones_llave_activa` garantiza que sea a lo sumo\n        -- una, así que el LEFT JOIN no duplica filas.\n        LEFT JOIN asignaciones_llave a\n               ON a.llave_id = ln.id AND a.devuelta_en IS NULL\n        LEFT JOIN personal p ON p.id = a.empleado_id\n        -- Todas las columnas van calificadas con `ln.`: desde que entró el join\n        -- `codigo` existe en las dos tablas y sin el alias es ambiguo.\n        WHERE ($1::text IS NULL OR ln.estado = $1)\n          -- El uid es UNIQUE y llega normalizado desde el payload, así que es\n          -- igualdad exacta: devuelve una llave o ninguna.\n          AND ($2::text IS NULL OR ln.uid = $2)\n          -- La búsqueda cubre lo que un humano tiene a mano: el código rotulado\n          -- en la tarjeta y la descripción. Las llaves sin descripción no se\n          -- pierden porque el OR del codigo sigue evaluándose.\n          AND ($3::text IS NULL\n               OR ln.codigo      ILIKE '%' || $3 || '%'\n               OR ln.descripcion ILIKE '%' || $3 || '%')\n        ORDER BY ln.creado_en DESC, ln.id DESC\n        LIMIT $4\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "uid",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "uid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "codigo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "estado",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "estado"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "descripcion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "descripcion"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "actualizado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "actualizado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "empleado_codigo?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "asignacion_cerrada_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "fd1e746a090ccb058bf91b30ccf8bcfbf1d55030f2c7fee0f6b0b2eea2ef8971"
+}

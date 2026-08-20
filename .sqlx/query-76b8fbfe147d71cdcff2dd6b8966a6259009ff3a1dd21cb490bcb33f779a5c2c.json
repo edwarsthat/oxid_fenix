@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE personal\n        SET activo = FALSE,\n            fecha_retiro = CURRENT_DATE\n        WHERE id = $1 AND activo = TRUE\n        RETURNING id, codigo, tipo_documento, documento, nombre, apellido,\n                  fecha_nacimiento, telefono, cargo_id, fecha_ingreso,\n                  fecha_retiro, activo, version, creado_en, actualizado_en\n        ",
+  "query": "\n        INSERT INTO personal (tipo_documento, documento, nombre, apellido,\n                              fecha_nacimiento, telefono, cargo_id, fecha_ingreso)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n        RETURNING id, codigo, tipo_documento, documento, nombre, apellido,\n                  fecha_nacimiento, telefono, cargo_id, fecha_ingreso,\n                  fecha_retiro, activo, version, creado_en, actualizado_en,\n                  -- Un empleado recién creado no puede tener llave asignada:\n                  -- acá los NULL son el dato real, no un placeholder.\n                  NULL::uuid        AS \"asignacion_id?\",\n                  NULL::uuid        AS \"llave_id?\",\n                  NULL::varchar     AS \"llave_codigo?\",\n                  NULL::varchar     AS \"llave_uid?\",\n                  NULL::timestamptz AS \"asignado_en?\"\n        ",
   "describe": {
     "columns": [
       {
@@ -167,11 +167,48 @@
             "name": "actualizado_en"
           }
         }
+      },
+      {
+        "ordinal": 15,
+        "name": "asignacion_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 16,
+        "name": "llave_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 17,
+        "name": "llave_codigo?",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
+        "name": "llave_uid?",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "asignado_en?",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Date",
+        "Varchar",
+        "Uuid",
+        "Date"
       ]
     },
     "nullable": [
@@ -189,8 +226,13 @@
       false,
       false,
       false,
-      false
+      false,
+      null,
+      null,
+      null,
+      null,
+      null
     ]
   },
-  "hash": "e3e448e877ff2f4f8ec98d000fb0eb65a726ca3d94f0c1db46d5daf01cd6e83b"
+  "hash": "76b8fbfe147d71cdcff2dd6b8966a6259009ff3a1dd21cb490bcb33f779a5c2c"
 }

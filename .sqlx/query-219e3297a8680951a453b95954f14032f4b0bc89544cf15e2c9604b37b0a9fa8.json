@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH cerrada AS (\n            UPDATE asignaciones_llave\n            SET devuelta_en = NOW(), motivo_devolucion = $2\n            WHERE id = $1 AND devuelta_en IS NULL\n            RETURNING id, llave_id, empleado_id, asignada_en, devuelta_en,\n                      motivo_devolucion, creado_en\n        ), _llave AS (\n            -- Va en el mismo statement y no en una segunda query para que no\n            -- exista un instante en que la asignación esté cerrada y la llave\n            -- perdida siga figurando en inventario.\n            --\n            -- Depende de `cerrada`, así que si el guard de arriba no tomó\n            -- ninguna fila esto tampoco toca nada: no hay que repetir la\n            -- condición. Y con $3 NULL (motivo que no degrada la llave) no\n            -- matchea, así que no reescribe la fila ni le sube la `version`\n            -- a nadie por gusto.\n            UPDATE llaves_nfc\n            SET estado = $3\n            FROM cerrada\n            WHERE llaves_nfc.id = cerrada.llave_id\n              AND $3::text IS NOT NULL\n        )\n        SELECT id AS \"id!\", llave_id AS \"llave_id!\",\n               empleado_id AS \"empleado_id!\", asignada_en AS \"asignada_en!\",\n               devuelta_en, motivo_devolucion, creado_en AS \"creado_en!\"\n        FROM cerrada\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "llave_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "llave_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "empleado_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "empleado_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "asignada_en!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "asignada_en"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "devuelta_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "devuelta_en"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "motivo_devolucion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "motivo_devolucion"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "creado_en!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "creado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "219e3297a8680951a453b95954f14032f4b0bc89544cf15e2c9604b37b0a9fa8"
+}

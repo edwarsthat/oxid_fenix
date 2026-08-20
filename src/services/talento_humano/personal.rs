@@ -258,6 +258,25 @@ where
             RETURNING id, codigo, tipo_documento, documento, nombre, apellido,
                       fecha_nacimiento, telefono, cargo_id, fecha_ingreso,
                       fecha_retiro, activo, version, creado_en, actualizado_en
+        ), devuelta AS (
+            -- El retiro le quita la llave. Sin esto la asignación queda abierta
+            -- para siempre y `ux_asignaciones_llave_activa` deja esa llave
+            -- ocupada por alguien que ya no trabaja acá: no se le puede asignar
+            -- a nadie más hasta que alguien se acuerde de cerrarla a mano.
+            --
+            -- `FROM empleado` la ata al UPDATE de arriba: si el guard
+            -- `activo = TRUE` no tomó la fila (ya estaba retirado), acá tampoco
+            -- se cierra nada.
+            --
+            -- El motivo es siempre 'retiro', que por `estado_por_motivo` no
+            -- toca `llaves_nfc.estado`: se asume que la llave volvió sana. Si
+            -- resulta que no apareció, eso se corrige después por
+            -- `llaves_nfc:update`.
+            UPDATE asignaciones_llave a
+            SET devuelta_en = NOW(), motivo_devolucion = 'retiro'
+            FROM empleado e
+            WHERE a.empleado_id = e.id AND a.devuelta_en IS NULL
+            RETURNING a.id, a.empleado_id, a.llave_id, a.asignada_en
         )
         SELECT e.id AS "id!", e.codigo AS "codigo!",
                e.tipo_documento AS "tipo_documento!", e.documento AS "documento!",
@@ -266,15 +285,21 @@ where
                e.fecha_ingreso AS "fecha_ingreso!", e.fecha_retiro,
                e.activo AS "activo!", e.version AS "version!",
                e.creado_en AS "creado_en!", e.actualizado_en AS "actualizado_en!",
-               a.id          AS "asignacion_id?",
-               a.llave_id    AS "llave_id?",
+               -- Acá estas columnas no son "la llave que tiene" como en el read,
+               -- sino "la llave que entregó al retirarse": salen del CTE que la
+               -- acaba de cerrar. Joinear contra `asignaciones_llave` no serviría
+               -- porque los CTE no ven los cambios de sus hermanos y devolvería
+               -- la asignación como si siguiera activa.
+               d.id          AS "asignacion_id?",
+               d.llave_id    AS "llave_id?",
                l.codigo      AS "llave_codigo?",
                l.uid         AS "llave_uid?",
-               a.asignada_en AS "asignado_en?"
+               d.asignada_en AS "asignado_en?"
         FROM empleado e
-        LEFT JOIN asignaciones_llave a
-               ON a.empleado_id = e.id AND a.devuelta_en IS NULL
-        LEFT JOIN llaves_nfc l ON l.id = a.llave_id
+        -- LEFT y no INNER: el que se retira sin llave asignada tiene que salir
+        -- igual en la respuesta, con estas columnas en NULL.
+        LEFT JOIN devuelta d ON d.empleado_id = e.id
+        LEFT JOIN llaves_nfc l ON l.id = d.llave_id
         "#,
         empleado_id,
     )

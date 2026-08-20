@@ -1,9 +1,9 @@
+pub mod cargo_personal;
 pub mod cargos;
 pub mod cargos_permisos;
 pub mod error;
 pub mod permisos;
 pub mod usuarios;
-pub mod cargo_personal;
 
 use sqlx::PgPool;
 

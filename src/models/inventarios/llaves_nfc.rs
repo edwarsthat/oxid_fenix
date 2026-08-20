@@ -4,7 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::models::validations::{
-    limitar, limpiar_busqueda, texto_opcional, ValidacionError, Validar,
+    ValidacionError, Validar, limitar, limpiar_busqueda, texto_opcional,
 };
 
 const LARGOS_UID: [usize; 3] = [8, 14, 20];
@@ -23,6 +23,16 @@ pub struct LlaveNfc {
     pub version: i32,
     pub creado_en: DateTime<Utc>,
     pub actualizado_en: DateTime<Utc>,
+
+    /// Código del empleado ligado a la llave: quien la tiene, o quien la tenía
+    /// si esta misma operación le cerró la asignación. `None` = está libre.
+    pub empleado_codigo: Option<String>,
+
+    /// Id de la asignación que esta operación cerró. Solo lo llena el update
+    /// cuando el estado nuevo obliga a devolver la llave; en el resto de las
+    /// consultas va NULL. Si viene con valor, `empleado_codigo` es quien la
+    /// tenía y la llave quedó libre.
+    pub asignacion_cerrada_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +79,9 @@ pub struct LlaveNfcUpdatePayload {
 pub struct LlaveNfcCambios {
     pub estado: String,
     pub descripcion: Option<String>,
+    /// Lo que sale de `motivo_por_estado`. `None` = el estado nuevo no obliga a
+    /// cerrar la asignación vigente.
+    pub motivo_cierre: Option<&'static str>,
 }
 
 #[derive(Debug)]
@@ -106,6 +119,24 @@ pub fn uid_nfc(valor: &str) -> Result<String, ValidacionError> {
 /// Normaliza y comprueba el estado contra la misma lista del CHECK. En el
 /// UPDATE la tabla igual lo atraparía, pero como 23514 genérico: validarlo acá
 /// deja el mensaje con los valores que sí sirven.
+/// Inversa de `estado_por_motivo`: con qué motivo se cierra la asignación
+/// activa cuando el inventario deja la llave en este estado. `None` = el estado
+/// no obliga a devolverla (`inventario` es donde vive una llave sana).
+///
+/// Sin esto, marcar como perdida una llave asignada la dejaba con el estado
+/// nuevo pero la asignación abierta: la llave seguía figurando en manos de
+/// alguien y `ux_asignaciones_llave_activa` impedía asignarla a nadie más.
+pub fn motivo_por_estado(estado: &str) -> Option<&'static str> {
+    match estado {
+        "perdida" => Some("perdida"),
+        "dannada" => Some("dannada"),
+        // `baja` es sacar la tarjeta de circulación, que es exactamente lo que
+        // significa `retiro` del lado de la asignación.
+        "baja" => Some("retiro"),
+        _ => None,
+    }
+}
+
 pub fn estado_nfc(valor: &str) -> Result<String, ValidacionError> {
     let valor = valor.trim().to_lowercase();
 
@@ -188,12 +219,17 @@ impl Validar for LlaveNfcUpdatePayload {
         // en el alta.
         let descripcion = texto_opcional(Some(&self.descripcion), "descripcion", 200)?;
 
+        // Con el estado ya validado en la mano: si no fuera así, el `_ => None`
+        // de `motivo_por_estado` leería un estado basura como "no cierra nada".
+        let motivo_cierre = motivo_por_estado(&estado);
+
         Ok(LlaveNfcActualizado {
             llave_nfc_id,
             version,
             datos: LlaveNfcCambios {
                 estado,
                 descripcion,
+                motivo_cierre,
             },
         })
     }

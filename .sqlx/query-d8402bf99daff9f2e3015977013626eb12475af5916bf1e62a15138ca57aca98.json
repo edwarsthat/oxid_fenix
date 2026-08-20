@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT devuelta_en FROM asignaciones_llave WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "devuelta_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "devuelta_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "d8402bf99daff9f2e3015977013626eb12475af5916bf1e62a15138ca57aca98"
+}

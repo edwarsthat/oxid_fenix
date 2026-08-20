@@ -1,0 +1,256 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH empleado AS (\n            UPDATE personal\n            SET activo = FALSE,\n                fecha_retiro = CURRENT_DATE\n            WHERE id = $1 AND activo = TRUE\n            RETURNING id, codigo, tipo_documento, documento, nombre, apellido,\n                      fecha_nacimiento, telefono, cargo_id, fecha_ingreso,\n                      fecha_retiro, activo, version, creado_en, actualizado_en\n        ), devuelta AS (\n            -- El retiro le quita la llave. Sin esto la asignación queda abierta\n            -- para siempre y `ux_asignaciones_llave_activa` deja esa llave\n            -- ocupada por alguien que ya no trabaja acá: no se le puede asignar\n            -- a nadie más hasta que alguien se acuerde de cerrarla a mano.\n            --\n            -- `FROM empleado` la ata al UPDATE de arriba: si el guard\n            -- `activo = TRUE` no tomó la fila (ya estaba retirado), acá tampoco\n            -- se cierra nada.\n            --\n            -- El motivo es siempre 'retiro', que por `estado_por_motivo` no\n            -- toca `llaves_nfc.estado`: se asume que la llave volvió sana. Si\n            -- resulta que no apareció, eso se corrige después por\n            -- `llaves_nfc:update`.\n            UPDATE asignaciones_llave a\n            SET devuelta_en = NOW(), motivo_devolucion = 'retiro'\n            FROM empleado e\n            WHERE a.empleado_id = e.id AND a.devuelta_en IS NULL\n            RETURNING a.id, a.empleado_id, a.llave_id, a.asignada_en\n        )\n        SELECT e.id AS \"id!\", e.codigo AS \"codigo!\",\n               e.tipo_documento AS \"tipo_documento!\", e.documento AS \"documento!\",\n               e.nombre AS \"nombre!\", e.apellido AS \"apellido!\",\n               e.fecha_nacimiento, e.telefono, e.cargo_id AS \"cargo_id!\",\n               e.fecha_ingreso AS \"fecha_ingreso!\", e.fecha_retiro,\n               e.activo AS \"activo!\", e.version AS \"version!\",\n               e.creado_en AS \"creado_en!\", e.actualizado_en AS \"actualizado_en!\",\n               -- Acá estas columnas no son \"la llave que tiene\" como en el read,\n               -- sino \"la llave que entregó al retirarse\": salen del CTE que la\n               -- acaba de cerrar. Joinear contra `asignaciones_llave` no serviría\n               -- porque los CTE no ven los cambios de sus hermanos y devolvería\n               -- la asignación como si siguiera activa.\n               d.id          AS \"asignacion_id?\",\n               d.llave_id    AS \"llave_id?\",\n               l.codigo      AS \"llave_codigo?\",\n               l.uid         AS \"llave_uid?\",\n               d.asignada_en AS \"asignado_en?\"\n        FROM empleado e\n        -- LEFT y no INNER: el que se retira sin llave asignada tiene que salir\n        -- igual en la respuesta, con estas columnas en NULL.\n        LEFT JOIN devuelta d ON d.empleado_id = e.id\n        LEFT JOIN llaves_nfc l ON l.id = d.llave_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "codigo!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tipo_documento!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "tipo_documento"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "documento!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "documento"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "nombre!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "apellido!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "apellido"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "fecha_nacimiento",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "fecha_nacimiento"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "telefono",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "telefono"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "cargo_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "cargo_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "fecha_ingreso!",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "fecha_ingreso"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "fecha_retiro",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "fecha_retiro"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "activo!",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "activo"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "version!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "creado_en!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "actualizado_en!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "actualizado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "asignacion_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "llave_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "llave_id"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "llave_codigo?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "llave_uid?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "uid"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "asignado_en?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "asignada_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "db8c00f5356161d89d9e5417707372e5c7aa040861bbc071d7fe503592793ee8"
+}

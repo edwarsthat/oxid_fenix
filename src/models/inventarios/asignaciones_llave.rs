@@ -8,6 +8,8 @@ use crate::models::{
     validations::{ValidacionError, Validar},
 };
 
+const MOTIVOS: [&str; 5] = ["devolucion", "perdida", "dannada", "retiro", "reemplazo"];
+
 #[derive(Debug, FromRow, Serialize)]
 pub struct AsignacionLlave {
     pub id: Uuid,
@@ -37,11 +39,36 @@ pub struct AsignacionLlaveNueva {
 #[derive(Debug, Deserialize)]
 pub struct AsignacionQuitarLlavePayload {
     pub asignacion_id: Uuid,
+    pub motivo_devolucion: String,
 }
 
 #[derive(Debug)]
 pub struct AsignacionQuitarLlaveData {
     pub asignacion_id: Uuid,
+    pub motivo_devolucion: String,
+    //service no toca llave_nfc.estado
+    pub estado_llave: Option<&'static str>,
+}
+
+pub fn estado_por_motivo(motivo: &str) -> Option<&'static str> {
+    match motivo {
+        "perdida" => Some("perdida"),
+        "dannada" => Some("dannada"),
+        _ => None,
+    }
+}
+
+pub fn motivo_devolucion(valor: &str) -> Result<String, ValidacionError> {
+    let valor = valor.trim().to_lowercase();
+
+    if !MOTIVOS.contains(&valor.as_str()) {
+        return Err(ValidacionError::nuevo(format!(
+            "el motivo debe ser uno de: {}",
+            MOTIVOS.join(", ")
+        )));
+    }
+
+    Ok(valor)
 }
 
 impl Validar for AsignacionLlaveAddPayload {
@@ -61,8 +88,12 @@ impl Validar for AsignacionQuitarLlavePayload {
     type Datos = AsignacionQuitarLlaveData;
 
     fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        let motivo_devolucion = motivo_devolucion(&self.motivo_devolucion)?;
+        let estado_llave = estado_por_motivo(&motivo_devolucion);
         Ok(AsignacionQuitarLlaveData {
             asignacion_id: self.asignacion_id,
+            motivo_devolucion,
+            estado_llave,
         })
     }
 }

@@ -9,10 +9,10 @@ use crate::{
     },
     routes::protocol::{Ctx, WsResponse},
     services::{
+        logs::audit_logs::create_audit_log,
         talento_humano::personal::{
             activar_personal, add_personal, delete_personal, get_personal, update_personal,
         },
-        logs::audit_logs::create_audit_log,
     },
 };
 
@@ -108,7 +108,7 @@ pub async fn personal_update(ctx: Ctx) -> WsResponse {
         Err(err) => return WsResponse::internal_error(ctx.id, "personal_update", err),
     };
 
-    let empleado_actualizado = match update_personal(&mut *tx, datos).await {
+    let empleado_actualizado = match update_personal(&mut tx, datos).await {
         Ok(empleado) => empleado,
         Err(err) => return WsResponse::from_service_error(ctx.id, "personal_update", err),
     };
@@ -184,6 +184,12 @@ pub async fn personal_delete(ctx: Ctx) -> WsResponse {
             "activo": empleado_retirado.activo,
             "fecha_retiro": empleado_retirado.fecha_retiro,
             "version": empleado_retirado.version,
+            // El retiro le cierra la asignación de llave, así que ese cambio de
+            // manos tiene que quedar acá: si no, la llave se libera sin rastro.
+            // Van en null cuando el empleado no tenía ninguna.
+            "asignacion_llave_cerrada": empleado_retirado.asignacion_id,
+            "llave_id": empleado_retirado.llave_id,
+            "llave_codigo": empleado_retirado.llave_codigo,
         })),
     )
     .await
@@ -200,6 +206,23 @@ pub async fn personal_delete(ctx: Ctx) -> WsResponse {
         "delete",
         serde_json::json!({ "data": empleado_retirado }),
     );
+
+    // Si el retiro liberó una llave, el inventario también cambió. El evento de
+    // `personal` no le llega a quien está mirando el listado de llaves, así que
+    // hace falta el segundo: sin él la llave figura ocupada hasta que recarguen.
+    if empleado_retirado.asignacion_id.is_some() {
+        ctx.emit(
+            "llaves_nfc",
+            "quitar",
+            serde_json::json!({ "data": {
+                "id": empleado_retirado.asignacion_id,
+                "llave_id": empleado_retirado.llave_id,
+                "empleado_id": empleado_retirado.id,
+                "asignada_en": empleado_retirado.asignado_en,
+                "motivo_devolucion": "retiro",
+            }}),
+        );
+    }
 
     WsResponse::ok(ctx.id, serde_json::json!({ "data": empleado_retirado }))
 }

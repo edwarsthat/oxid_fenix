@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE personal\n        SET tipo_documento = $3, documento = $4, nombre = $5, apellido = $6,\n            fecha_nacimiento = $7, telefono = $8, cargo_id = $9, fecha_ingreso = $10\n        WHERE id = $1 AND version = $2\n        RETURNING id, codigo, tipo_documento, documento, nombre, apellido,\n                  fecha_nacimiento, telefono, cargo_id, fecha_ingreso,\n                  fecha_retiro, activo, version, creado_en, actualizado_en\n        ",
+  "query": "\n        WITH empleado AS (\n            UPDATE personal\n            SET tipo_documento = $3, documento = $4, nombre = $5, apellido = $6,\n                fecha_nacimiento = $7, telefono = $8, cargo_id = $9, fecha_ingreso = $10\n            WHERE id = $1 AND version = $2\n            RETURNING id, codigo, tipo_documento, documento, nombre, apellido,\n                      fecha_nacimiento, telefono, cargo_id, fecha_ingreso,\n                      fecha_retiro, activo, version, creado_en, actualizado_en\n        )\n        SELECT e.id AS \"id!\", e.codigo AS \"codigo!\",\n               e.tipo_documento AS \"tipo_documento!\", e.documento AS \"documento!\",\n               e.nombre AS \"nombre!\", e.apellido AS \"apellido!\",\n               e.fecha_nacimiento, e.telefono, e.cargo_id AS \"cargo_id!\",\n               e.fecha_ingreso AS \"fecha_ingreso!\", e.fecha_retiro,\n               e.activo AS \"activo!\", e.version AS \"version!\",\n               e.creado_en AS \"creado_en!\", e.actualizado_en AS \"actualizado_en!\",\n               a.id          AS \"asignacion_id?\",\n               a.llave_id    AS \"llave_id?\",\n               l.codigo      AS \"llave_codigo?\",\n               l.uid         AS \"llave_uid?\",\n               a.asignada_en AS \"asignado_en?\"\n        FROM empleado e\n        LEFT JOIN asignaciones_llave a\n               ON a.empleado_id = e.id AND a.devuelta_en IS NULL\n        LEFT JOIN llaves_nfc l ON l.id = a.llave_id\n        ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "id!",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "codigo",
+        "name": "codigo!",
         "type_info": "Varchar",
         "origin": {
           "Table": {
@@ -27,7 +27,7 @@
       },
       {
         "ordinal": 2,
-        "name": "tipo_documento",
+        "name": "tipo_documento!",
         "type_info": "Varchar",
         "origin": {
           "Table": {
@@ -38,7 +38,7 @@
       },
       {
         "ordinal": 3,
-        "name": "documento",
+        "name": "documento!",
         "type_info": "Varchar",
         "origin": {
           "Table": {
@@ -49,7 +49,7 @@
       },
       {
         "ordinal": 4,
-        "name": "nombre",
+        "name": "nombre!",
         "type_info": "Varchar",
         "origin": {
           "Table": {
@@ -60,7 +60,7 @@
       },
       {
         "ordinal": 5,
-        "name": "apellido",
+        "name": "apellido!",
         "type_info": "Varchar",
         "origin": {
           "Table": {
@@ -93,7 +93,7 @@
       },
       {
         "ordinal": 8,
-        "name": "cargo_id",
+        "name": "cargo_id!",
         "type_info": "Uuid",
         "origin": {
           "Table": {
@@ -104,7 +104,7 @@
       },
       {
         "ordinal": 9,
-        "name": "fecha_ingreso",
+        "name": "fecha_ingreso!",
         "type_info": "Date",
         "origin": {
           "Table": {
@@ -126,7 +126,7 @@
       },
       {
         "ordinal": 11,
-        "name": "activo",
+        "name": "activo!",
         "type_info": "Bool",
         "origin": {
           "Table": {
@@ -137,7 +137,7 @@
       },
       {
         "ordinal": 12,
-        "name": "version",
+        "name": "version!",
         "type_info": "Int4",
         "origin": {
           "Table": {
@@ -148,7 +148,7 @@
       },
       {
         "ordinal": 13,
-        "name": "creado_en",
+        "name": "creado_en!",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
@@ -159,12 +159,67 @@
       },
       {
         "ordinal": 14,
-        "name": "actualizado_en",
+        "name": "actualizado_en!",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
             "table": "personal",
             "name": "actualizado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "asignacion_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "llave_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "llave_id"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "llave_codigo?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "llave_uid?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "uid"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "asignado_en?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "asignada_en"
           }
         }
       }
@@ -198,8 +253,13 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "3ccc9b0f157110b256d31a35c3f3d72ad20ba70d3e0a244c54a88d86c00d0523"
+  "hash": "ceb14099b204d3ebcab9208af6b623a170248f34ea7ea898d6543f47e4f66f08"
 }

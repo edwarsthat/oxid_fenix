@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO asignaciones_llave (llave_id, empleado_id)\n        SELECT id, $2::uuid\n        FROM llaves_nfc\n        WHERE uid = $1 AND estado = 'inventario'\n        RETURNING id, llave_id, empleado_id, asignada_en, devuelta_en,\n                  motivo_devolucion, creado_en\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "llave_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "llave_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "empleado_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "empleado_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "asignada_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "asignada_en"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "devuelta_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "devuelta_en"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "motivo_devolucion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "motivo_devolucion"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "creado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "f20f2beea54675ec5b826fb444e8b65a2bfbb2ad8c1377223cbf52d17f01292a"
+}

@@ -1,0 +1,140 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH actualizada AS (\n            UPDATE llaves_nfc\n            SET estado = $3, descripcion = $4\n            WHERE id = $1 AND version = $2\n            RETURNING id, uid, codigo, estado, descripcion, version,\n                      creado_en, actualizado_en\n        ), devuelta AS (\n            -- Marcar una llave como perdida/dañada/de baja mientras está en\n            -- manos de alguien dejaba la asignación abierta: la llave figuraba\n            -- con el estado nuevo pero seguía ocupada, y por\n            -- `ux_asignaciones_llave_activa` no se le podía dar a nadie más.\n            --\n            -- `FROM actualizada` la ata al UPDATE de arriba: si el guard de\n            -- version no tomó la fila, acá tampoco se cierra nada. Y con $5 NULL\n            -- (estado que no obliga a devolver) no matchea ninguna fila.\n            UPDATE asignaciones_llave a\n            SET devuelta_en = NOW(), motivo_devolucion = $5\n            FROM actualizada ln\n            WHERE a.llave_id = ln.id\n              AND a.devuelta_en IS NULL\n              AND $5::text IS NOT NULL\n            RETURNING a.id, a.llave_id, a.empleado_id\n        )\n        -- El join va afuera del UPDATE porque un RETURNING no admite JOIN.\n        SELECT ln.id AS \"id!\", ln.uid AS \"uid!\", ln.codigo AS \"codigo!\",\n               ln.estado AS \"estado!\", ln.descripcion,\n               ln.version AS \"version!\", ln.creado_en AS \"creado_en!\",\n               ln.actualizado_en AS \"actualizado_en!\",\n               p.codigo AS \"empleado_codigo?\",\n               d.id     AS \"asignacion_cerrada_id?\"\n        FROM actualizada ln\n        LEFT JOIN devuelta d ON d.llave_id = ln.id\n        -- Este join ve el snapshot previo (los CTE no ven los cambios de sus\n        -- hermanos), así que cubre el caso en que no se cerró nada: la llave\n        -- sigue asignada y hay que mostrar a quién.\n        LEFT JOIN asignaciones_llave a\n               ON a.llave_id = ln.id AND a.devuelta_en IS NULL\n        LEFT JOIN personal p ON p.id = COALESCE(d.empleado_id, a.empleado_id)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "uid!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "uid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "codigo!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "estado!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "estado"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "descripcion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "descripcion"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "version!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "creado_en!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "actualizado_en!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "actualizado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "empleado_codigo?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "personal",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "asignacion_cerrada_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "asignaciones_llave",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "0356b46acc55cfe9e2eb298bda4694d95adecd51b61bb5f1abf0e979df47ef52"
+}

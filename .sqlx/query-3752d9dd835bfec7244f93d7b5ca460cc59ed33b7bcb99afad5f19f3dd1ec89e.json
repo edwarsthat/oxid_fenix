@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT estado FROM llaves_nfc WHERE uid = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "estado",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "llaves_nfc",
+            "name": "estado"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3752d9dd835bfec7244f93d7b5ca460cc59ed33b7bcb99afad5f19f3dd1ec89e"
+}

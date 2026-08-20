@@ -1,7 +1,7 @@
 use crate::{
     models::{
         inventarios::{
-            asignaciones_llave::AsignacionLlaveAddPayload,
+            asignaciones_llave::{AsignacionLlaveAddPayload, AsignacionQuitarLlavePayload},
             llaves_nfc::{LlaveNfcAddPayload, LlaveNfcReadPayload, LlaveNfcUpdatePayload},
         },
         validations::Validar,
@@ -9,7 +9,8 @@ use crate::{
     routes::protocol::{Ctx, WsResponse},
     services::{
         inventarios::llaves_nfc::{
-            add_llave_nfc, create_asignaciones_llave, get_llaves_nfc, update_llave_nfc,
+            add_llave_nfc, create_asignaciones_llave, get_llaves_nfc, quitar_asignacion_llave,
+            update_llave_nfc,
         },
         logs::audit_logs::create_audit_log,
     },
@@ -129,6 +130,11 @@ pub async fn llave_nfc_update(ctx: Ctx) -> WsResponse {
             "estado": llave_nfc_actualizado.estado,
             "descripcion": llave_nfc_actualizado.descripcion,
             "version": llave_nfc_actualizado.version,
+            // Si el estado nuevo obligó a devolver la llave, esto es lo único
+            // que deja rastro de que se le quitó a una persona: van en null
+            // cuando la llave no estaba asignada o el estado no la desasigna.
+            "asignacion_cerrada_id": llave_nfc_actualizado.asignacion_cerrada_id,
+            "empleado_codigo": llave_nfc_actualizado.empleado_codigo,
         })),
     )
     .await
@@ -170,7 +176,7 @@ pub async fn controller_asignar_llave(ctx: Ctx) -> WsResponse {
         Err(err) => return WsResponse::internal_error(ctx.id, "asignaciones_llave", err),
     };
 
-    let asignacion_nueva = match create_asignaciones_llave(&mut *tx, datos).await {
+    let asignacion_nueva = match create_asignaciones_llave(&mut tx, datos).await {
         Ok(asignacion) => asignacion,
         Err(err) => return WsResponse::from_service_error(ctx.id, "asignaciones_llave", err),
     };
@@ -208,4 +214,69 @@ pub async fn controller_asignar_llave(ctx: Ctx) -> WsResponse {
     );
 
     WsResponse::ok(ctx.id, serde_json::json!({ "data": asignacion_nueva }))
+}
+
+pub async fn controller_quitar_llave(ctx: Ctx) -> WsResponse {
+    let payload: AsignacionQuitarLlavePayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
+
+    let datos = match payload.validar() {
+        Ok(datos) => datos,
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos ivalidos: {err}")),
+    };
+
+    let mut tx = match ctx.state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => return WsResponse::internal_error(ctx.id, "quitar_llave_nfc", err),
+    };
+
+    // Va con la transacción y no con el pool para que la devolución y su log
+    // entren o no entren juntos: si el audit falla, la llave tiene que seguir
+    // figurando como asignada.
+    let asignacion_cerrada = match quitar_asignacion_llave(&mut tx, datos).await {
+        Ok(asignacion) => asignacion,
+        Err(err) => return WsResponse::from_service_error(ctx.id, "quitar_llave_nfc", err),
+    };
+
+    // Se loguea la fila como quedó, no lo que mandó el cliente: `devuelta_en` lo
+    // puso NOW() adentro del UPDATE y es el dato que después hay que poder
+    // auditar. `asignada_en` va también para que el log tenga el periodo
+    // completo sin salir a buscar la fila.
+    if let Err(err) = create_audit_log(
+        &mut *tx,
+        "asignaciones_llave",
+        asignacion_cerrada.id,
+        "quitar",
+        ctx.user_id,
+        Some("inventarios"),
+        Some(serde_json::json!({
+            "llave_id": asignacion_cerrada.llave_id,
+            "empleado_id": asignacion_cerrada.empleado_id,
+            "asignada_en": asignacion_cerrada.asignada_en,
+            "devuelta_en": asignacion_cerrada.devuelta_en,
+            "motivo_devolucion": asignacion_cerrada.motivo_devolucion,
+        })),
+    )
+    .await
+    {
+        return WsResponse::from_service_error(ctx.id, "quitar_llave_nfc", err);
+    }
+
+    if let Err(err) = tx.commit().await {
+        return WsResponse::internal_error(ctx.id, "quitar_llave_nfc", err);
+    }
+
+    // Mismo motivo que en `asignar`: el evento se llama `llaves_nfc` porque
+    // `emit` arma el filtro como `{event}:read` y el permiso sembrado es
+    // `llaves_nfc:read`.
+    ctx.emit(
+        "llaves_nfc",
+        "asignar",
+        serde_json::json!({ "data": asignacion_cerrada }),
+    );
+
+    WsResponse::ok(ctx.id, serde_json::json!({ "data": asignacion_cerrada }))
 }

@@ -6,11 +6,11 @@ use crate::{
     },
     routes::protocol::{Ctx, WsResponse},
     services::{
+        logs::audit_logs::create_audit_log,
         talento_humano::cargos_personal::{
             activar_cargo_personal, create_cargo_personal, delete_cargo_personal,
             get_cargo_personal, update_cargo_personal,
         },
-        logs::audit_logs::create_audit_log,
     },
 };
 
