@@ -3,5 +3,6 @@ pub mod administracion;
 pub mod dispatcher;
 pub mod inventarios;
 pub mod protocol;
+pub mod proveedores;
 pub mod sistema;
 pub mod talento_humano;

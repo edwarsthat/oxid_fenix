@@ -11,9 +11,6 @@ pub enum ApiError {
     #[error("credenciales invalidas")]
     CredencialesInvalidas,
 
-    #[error("usuario inactivo")]
-    UsuarioInactivo,
-
     #[error("token ausente")]
     TokenAusente,
 
@@ -39,7 +36,6 @@ impl IntoResponse for ApiError {
                 StatusCode::UNAUTHORIZED,
                 "credenciales inválidas".to_string(),
             ),
-            ApiError::UsuarioInactivo => (StatusCode::FORBIDDEN, "usuario inactivo".to_string()),
             ApiError::Service(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "error interno".to_string(),
@@ -141,12 +137,6 @@ mod tests {
         assert_eq!(
             ApiError::CredencialesInvalidas.into_response().status(),
             StatusCode::UNAUTHORIZED
-        );
-
-        // usuario inactivo -> 403
-        assert_eq!(
-            ApiError::UsuarioInactivo.into_response().status(),
-            StatusCode::FORBIDDEN
         );
 
         // error de servicio (base de datos) -> 500

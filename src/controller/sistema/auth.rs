@@ -24,14 +24,14 @@ pub async fn login(
 ) -> Result<impl IntoResponse, ApiError> {
     let LoginInput { usuario, password } = input;
 
+    // Acá no va un chequeo de `usuario.activo`: `verificar_credenciales` busca
+    // con `WHERE activo = true`, así que una cuenta dada de baja ya sale por
+    // esta rama. Y así conviene que sea: un 403 "usuario inactivo" le confirmaría
+    // a quien prueba credenciales que la cuenta existe.
     let Some(usuario) = auth::verificar_credenciales(&state.pool, &usuario, &password).await?
     else {
         return Err(ApiError::CredencialesInvalidas);
     };
-
-    if !usuario.activo {
-        return Err(ApiError::UsuarioInactivo);
-    }
 
     let permisos = auth::get_permisos_por_cargo(&state.pool, usuario.cargo_id.clone()).await?;
     let permisos_map: Arc<HashSet<String>> = Arc::new(permisos.clone().into_iter().collect());

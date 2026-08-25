@@ -8,6 +8,10 @@ use crate::{
 // Hash argon2 de cualquier contraseña, generado una vez con hashear()
 const DUMMY_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$vBUueYcnLVdWEHGAJXkFjQ$XnRTL9GMlDT4os2lmvc2WJTFH29bXPNZtbJ8n51bw2d";
 
+/// El `activo = true` no es un detalle del listado: es lo que hace que una
+/// cuenta dada de baja no pueda entrar. `login` confía en eso y no vuelve a
+/// chequear `usuario.activo`, así que sacar esa condición de acá deja pasar a
+/// los inactivos sin que ningún otro punto lo atrape.
 pub async fn get_usuario_username(
     pool: &PgPool,
     username: &str,
