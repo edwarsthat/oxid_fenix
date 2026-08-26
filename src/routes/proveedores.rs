@@ -15,6 +15,24 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::proveedores::proveedores_get(ctx).await
         }
+        "proveedores:update" => {
+            if !ctx.permisos.contains("proveedores:update") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::proveedores::proveedores_update(ctx).await
+        }
+        "proveedores:delete" => {
+            if !ctx.permisos.contains("proveedores:delete") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::proveedores::proveedores_delete(ctx).await
+        }
+        "proveedores:reactivar" => {
+            if !ctx.permisos.contains("proveedores:update") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::proveedores::proveedores_activar(ctx).await
+        }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }

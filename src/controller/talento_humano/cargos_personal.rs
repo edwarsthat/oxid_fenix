@@ -1,8 +1,9 @@
-use uuid::Uuid;
-
 use crate::{
-    models::talento_humano::cargos_personal::{
-        CargoPersonalAddPayload, CargoPersonalUpdatePayload,
+    models::{
+        talento_humano::cargos_personal::{
+            CargoPersonalAddPayload, CargoPersonalIdPayload, CargoPersonalUpdatePayload,
+        },
+        validations::Validar,
     },
     routes::protocol::{Ctx, WsResponse},
     services::{
@@ -127,14 +128,15 @@ pub async fn cargos_personal_update(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn cargos_personal_delete(ctx: Ctx) -> WsResponse {
-    let cargo_id = match ctx.data.get("cargo_id").and_then(|v| v.as_str()) {
-        Some(cargo_id) => cargo_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el cargo personal id"),
-    };
+    let payload: CargoPersonalIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let cargo_id: Uuid = match Uuid::parse_str(&cargo_id) {
+    let cargo_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "El cargo_id no es un UUID válido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let mut tx = match ctx.state.pool.begin().await {
@@ -181,14 +183,15 @@ pub async fn cargos_personal_read(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn cargos_personal_activar(ctx: Ctx) -> WsResponse {
-    let cargo_id = match ctx.data.get("cargo_id").and_then(|v| v.as_str()) {
-        Some(cargo_id) => cargo_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el cargo personal id"),
-    };
+    let payload: CargoPersonalIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let cargo_id = match Uuid::parse_str(&cargo_id) {
+    let cargo_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id es un Uuid no valido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let mut tx = match ctx.state.pool.begin().await {

@@ -1,0 +1,362 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE proveedores\n        SET tipo_proveedor = $3, tipo_persona = $4, tipo_documento = $5, documento = $6,\n            digito_verificacion = $7, nombre = $8, razon_social = $9,\n            telefono = $10, telefono_alterno = $11, email = $12, direccion = $13,\n            departamento = $14, municipio = $15, contacto_nombre = $16, contacto_telefono = $17,\n            banco = $18, tipo_cuenta = $19, numero_cuenta = $20, titular_cuenta = $21,\n            titular_documento = $22, observaciones = $23\n        WHERE id = $1 AND version = $2\n        RETURNING id, codigo, tipo_proveedor, tipo_persona, tipo_documento, documento,\n                  digito_verificacion, nombre, razon_social,\n                  telefono, telefono_alterno, email, direccion,\n                  departamento, municipio, contacto_nombre, contacto_telefono,\n                  banco, tipo_cuenta, numero_cuenta, titular_cuenta,\n                  titular_documento, observaciones,\n                  activo, version, creado_en, actualizado_en\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "codigo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tipo_proveedor",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "tipo_proveedor"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "tipo_persona",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "tipo_persona"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tipo_documento",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "tipo_documento"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "documento",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "documento"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "digito_verificacion",
+        "type_info": "Bpchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "digito_verificacion"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "razon_social",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "razon_social"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "telefono",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "telefono"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "telefono_alterno",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "telefono_alterno"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "email",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "direccion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "direccion"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "departamento",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "departamento"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "municipio",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "municipio"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "contacto_nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "contacto_nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "contacto_telefono",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "contacto_telefono"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "banco",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "banco"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "tipo_cuenta",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "tipo_cuenta"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "numero_cuenta",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "numero_cuenta"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "titular_cuenta",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "titular_cuenta"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "titular_documento",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "titular_documento"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "observaciones",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "observaciones"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "activo",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "activo"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 25,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 26,
+        "name": "actualizado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "actualizado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Bpchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "715efe48324447dcd06921f5d6f3521c9b1be3fc535276f637c2c6562740e319"
+}

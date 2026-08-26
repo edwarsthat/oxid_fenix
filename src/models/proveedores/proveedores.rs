@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::models::validations::{
     LIMITE_MAXIMO, ValidacionError, Validar, limpiar_busqueda, texto_obligatorio, texto_opcional,
+    uuid_requerido,
 };
 
 #[derive(Debug, FromRow, Serialize)]
@@ -134,6 +135,66 @@ pub struct ProveedoresFiltros {
     pub tipo_persona: Option<String>,
     pub departamento: Option<String>,
     pub limite: i64,
+}
+
+/// Lo que manda el cliente para editar. Es un reemplazo completo: viajan todos
+/// los campos, no solo los que cambiaron, así que las reglas son las mismas del
+/// alta más el id y la version.
+#[derive(Debug, Deserialize)]
+pub struct ProveedorUpdatePayload {
+    pub proveedor_id: Option<String>,
+
+    pub tipo_proveedor: String,
+    pub tipo_persona: Option<String>,
+    pub tipo_documento: Option<String>,
+    pub documento: String,
+    pub digito_verificacion: Option<String>,
+
+    pub nombre: String,
+    pub razon_social: Option<String>,
+
+    pub telefono: Option<String>,
+    pub telefono_alterno: Option<String>,
+    pub email: Option<String>,
+    pub direccion: Option<String>,
+    pub departamento: Option<String>,
+    pub municipio: Option<String>,
+    pub contacto_nombre: Option<String>,
+    pub contacto_telefono: Option<String>,
+
+    pub banco: Option<String>,
+    pub tipo_cuenta: Option<String>,
+    pub numero_cuenta: Option<String>,
+    pub titular_cuenta: Option<String>,
+    pub titular_documento: Option<String>,
+
+    pub observaciones: Option<String>,
+
+    pub version: i32,
+}
+
+/// Lo que devuelve validar() y consume el servicio. Los campos editables no se
+/// repiten acá: son los mismos del alta y viajan dentro de `datos`, así el
+/// UPDATE y el INSERT no pueden quedar validando reglas distintas.
+#[derive(Debug)]
+pub struct ProveedorActualizado {
+    pub proveedor_id: Uuid,
+    pub version: i32,
+    pub datos: ProveedorNuevo,
+}
+
+/// Payload de las operaciones que solo señalan a un proveedor (dar de baja).
+#[derive(Debug, Deserialize)]
+pub struct ProveedorIdPayload {
+    pub proveedor_id: Option<String>,
+}
+
+impl Validar for ProveedorIdPayload {
+    type Datos = Uuid;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        uuid_requerido(self.proveedor_id, "proveedor_id")
+    }
 }
 
 /// Normaliza y comprueba un valor contra la misma lista del CHECK. En el INSERT
@@ -350,5 +411,223 @@ impl Validar for ProveedorReadPayload {
             departamento,
             limite,
         })
+    }
+}
+
+impl Validar for ProveedorUpdatePayload {
+    type Datos = ProveedorActualizado;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        // La tabla arranca en 1 y solo sube; un valor menor no salió de un read.
+        if self.version < 1 {
+            return Err(ValidacionError::nuevo(
+                "la version del proveedor no es válida, recarga los datos",
+            ));
+        }
+
+        let proveedor_id = uuid_requerido(self.proveedor_id, "proveedor_id")?;
+        let version = self.version;
+
+        // Las reglas de los campos son idénticas a las del alta, así que se
+        // reusan en vez de repetirse: si cambia un largo, una lista del CHECK o
+        // la regla de los datos bancarios, cambia en un solo lugar.
+        let datos = ProveedorAddPayload {
+            tipo_proveedor: self.tipo_proveedor,
+            tipo_persona: self.tipo_persona,
+            tipo_documento: self.tipo_documento,
+            documento: self.documento,
+            digito_verificacion: self.digito_verificacion,
+            nombre: self.nombre,
+            razon_social: self.razon_social,
+            telefono: self.telefono,
+            telefono_alterno: self.telefono_alterno,
+            email: self.email,
+            direccion: self.direccion,
+            departamento: self.departamento,
+            municipio: self.municipio,
+            contacto_nombre: self.contacto_nombre,
+            contacto_telefono: self.contacto_telefono,
+            banco: self.banco,
+            tipo_cuenta: self.tipo_cuenta,
+            numero_cuenta: self.numero_cuenta,
+            titular_cuenta: self.titular_cuenta,
+            titular_documento: self.titular_documento,
+            observaciones: self.observaciones,
+        }
+        .validar()?;
+
+        Ok(ProveedorActualizado {
+            proveedor_id,
+            version,
+            datos,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn update_payload() -> ProveedorUpdatePayload {
+        ProveedorUpdatePayload {
+            proveedor_id: Some(Uuid::new_v4().to_string()),
+            tipo_proveedor: "insumo".into(),
+            tipo_persona: None,
+            tipo_documento: None,
+            documento: "900123456".into(),
+            digito_verificacion: None,
+            nombre: "Insumos del Valle".into(),
+            razon_social: None,
+            telefono: None,
+            telefono_alterno: None,
+            email: None,
+            direccion: None,
+            departamento: None,
+            municipio: None,
+            contacto_nombre: None,
+            contacto_telefono: None,
+            banco: None,
+            tipo_cuenta: None,
+            numero_cuenta: None,
+            titular_cuenta: None,
+            titular_documento: None,
+            observaciones: None,
+            version: 1,
+        }
+    }
+
+    #[test]
+    fn validar_devuelve_id_version_y_datos_normalizados() {
+        let id = Uuid::new_v4();
+        let payload = ProveedorUpdatePayload {
+            proveedor_id: Some(id.to_string()),
+            tipo_proveedor: "  INSUMO  ".into(),
+            nombre: "  Insumos del Valle  ".into(),
+            version: 4,
+            ..update_payload()
+        };
+
+        let actualizado = payload.validar().expect("deberia ser valido");
+
+        assert_eq!(actualizado.proveedor_id, id);
+        assert_eq!(actualizado.version, 4);
+        assert_eq!(actualizado.datos.tipo_proveedor, "insumo");
+        assert_eq!(actualizado.datos.nombre, "Insumos del Valle");
+        // Los defaults de la tabla se aplican igual que en el alta.
+        assert_eq!(actualizado.datos.tipo_persona, "natural");
+        assert_eq!(actualizado.datos.tipo_documento, "CC");
+    }
+
+    #[test]
+    fn validar_rechaza_version_menor_a_uno() {
+        let payload = ProveedorUpdatePayload {
+            version: 0,
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "la version del proveedor no es válida, recarga los datos"
+        );
+    }
+
+    #[test]
+    fn validar_rechaza_proveedor_id_invalido() {
+        let payload = ProveedorUpdatePayload {
+            proveedor_id: Some("no-es-un-uuid".into()),
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "el proveedor_id no es un UUID válido"
+        );
+    }
+
+    #[test]
+    fn validar_rechaza_proveedor_id_ausente() {
+        let payload = ProveedorUpdatePayload {
+            proveedor_id: None,
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "falta el proveedor_id"
+        );
+    }
+
+    /// El update no revalida a mano: hereda las reglas del alta. Si esto se
+    /// rompe, es que dejó de reusar `ProveedorAddPayload`.
+    #[test]
+    fn validar_hereda_las_reglas_del_alta() {
+        let payload = ProveedorUpdatePayload {
+            tipo_persona: Some("juridica".into()),
+            razon_social: None,
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "una persona juridica debe tener razon_social"
+        );
+
+        let payload = ProveedorUpdatePayload {
+            numero_cuenta: Some("123456".into()),
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "si se carga un numero_cuenta hay que indicar banco y tipo_cuenta"
+        );
+    }
+
+    /// La version se valida antes que el resto: quien manda datos viejos tiene
+    /// que recargar, no ponerse a corregir campos que igual va a perder.
+    #[test]
+    fn la_version_se_valida_antes_que_los_campos() {
+        let payload = ProveedorUpdatePayload {
+            version: 0,
+            nombre: "   ".into(),
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "la version del proveedor no es válida, recarga los datos"
+        );
+    }
+
+    #[test]
+    fn validar_id_devuelve_el_uuid() {
+        let id = Uuid::new_v4();
+        let payload = ProveedorIdPayload {
+            proveedor_id: Some(format!("  {id}  ")),
+        };
+
+        assert_eq!(payload.validar().expect("deberia ser valido"), id);
+    }
+
+    #[test]
+    fn validar_id_rechaza_uuid_invalido() {
+        let payload = ProveedorIdPayload {
+            proveedor_id: Some("no-es-un-uuid".into()),
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "el proveedor_id no es un UUID válido"
+        );
+    }
+
+    #[test]
+    fn validar_id_rechaza_ausencia() {
+        let payload = ProveedorIdPayload { proveedor_id: None };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "falta el proveedor_id"
+        );
     }
 }

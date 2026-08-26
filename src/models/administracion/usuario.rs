@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::models::validations::ValidacionError;
+use crate::models::validations::{ValidacionError, Validar, uuid_obligatorio, uuid_requerido};
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct Usuario {
@@ -107,8 +107,7 @@ fn normalizar(
         return Err(ValidacionError::nuevo("el usuario no puede tener espacios"));
     }
 
-    let cargo_id =
-        Uuid::parse_str(cargo_id).map_err(|_| ValidacionError::nuevo("cargo_id no valido"))?;
+    let cargo_id = uuid_obligatorio(cargo_id, "cargo_id")?;
 
     Ok(UsuarioDatos {
         nombre: nombre.to_string(),
@@ -135,6 +134,21 @@ fn es_email_valido(email: &str) -> bool {
         && !email.contains(char::is_whitespace)
 }
 
+/// Payload de las operaciones que solo señalan a un usuario (eliminar, activar,
+/// reiniciar contraseña, cerrarle las sesiones).
+#[derive(Debug, Deserialize)]
+pub struct UsuarioIdPayload {
+    pub usuario_id: Option<String>,
+}
+
+impl Validar for UsuarioIdPayload {
+    type Datos = Uuid;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        uuid_requerido(self.usuario_id, "usuario_id")
+    }
+}
+
 impl UsuariosAddPayload {
     pub fn validar(&self) -> Result<UsuarioDatos, ValidacionError> {
         normalizar(
@@ -158,8 +172,7 @@ impl UsuariosUpdatePayload {
             &self.cargo_id,
         )?;
 
-        let usuario_id = Uuid::parse_str(&self.usuario_id)
-            .map_err(|_| ValidacionError::nuevo("usuario_id no valido"))?;
+        let usuario_id = uuid_obligatorio(&self.usuario_id, "usuario_id")?;
 
         Ok((datos, usuario_id))
     }
@@ -268,7 +281,7 @@ mod tests {
 
         assert_eq!(
             payload.validar().unwrap_err().mensaje(),
-            "cargo_id no valido"
+            "el cargo_id no es un UUID válido"
         );
     }
 
@@ -304,7 +317,7 @@ mod tests {
 
         assert_eq!(
             payload.validar().unwrap_err().mensaje(),
-            "usuario_id no valido"
+            "el usuario_id no es un UUID válido"
         );
     }
 }

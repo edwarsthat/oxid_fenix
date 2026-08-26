@@ -1,6 +1,6 @@
 use crate::models::validations::{
     LIMITE_MAXIMO, Rango, RangoValidado, ValidacionError, Validar, limpiar_busqueda,
-    texto_obligatorio, texto_opcional,
+    texto_obligatorio, texto_opcional, uuid_obligatorio, uuid_opcional, uuid_requerido,
 };
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -112,17 +112,19 @@ pub struct PersonalActualizado {
     pub datos: PersonalNuevo,
 }
 
-/// Los filtros por id llegan como texto (el cliente manda JSON), así que el
-/// parseo y su error son los mismos para todos: se resuelven en un solo lugar.
-fn uuid_obligatorio(valor: &str, campo: &str) -> Result<Uuid, ValidacionError> {
-    Uuid::parse_str(valor.trim())
-        .map_err(|_| ValidacionError::nuevo(format!("el {campo} no es un UUID válido")))
+/// Las operaciones que solo necesitan señalar a un empleado (retirar, activar)
+/// comparten payload: el id llega como texto y se valida igual que el resto.
+#[derive(Debug, Deserialize)]
+pub struct PersonalIdPayload {
+    pub empleado_id: Option<String>,
 }
 
-fn uuid_opcional(valor: Option<String>, campo: &str) -> Result<Option<Uuid>, ValidacionError> {
-    valor
-        .map(|texto| uuid_obligatorio(&texto, campo))
-        .transpose()
+impl Validar for PersonalIdPayload {
+    type Datos = Uuid;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        uuid_requerido(self.empleado_id, "empleado_id")
+    }
 }
 
 impl Validar for PersonalReadPayload {

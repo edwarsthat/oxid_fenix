@@ -1,9 +1,7 @@
-use uuid::Uuid;
-
 use crate::{
     models::{
         talento_humano::personal::{
-            PersonalAddPayload, PersonalReadPayload, PersonalUpdatePayload,
+            PersonalAddPayload, PersonalIdPayload, PersonalReadPayload, PersonalUpdatePayload,
         },
         validations::Validar,
     },
@@ -150,14 +148,15 @@ pub async fn personal_update(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn personal_delete(ctx: Ctx) -> WsResponse {
-    let empleado_id = match ctx.data.get("empleado_id").and_then(|v| v.as_str()) {
-        Some(empleado_id) => empleado_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el empleado id"),
-    };
+    let payload: PersonalIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let empleado_id = match Uuid::parse_str(empleado_id) {
+    let empleado_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "El empleado_id no es un UUID válido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let mut tx = match ctx.state.pool.begin().await {
@@ -228,14 +227,15 @@ pub async fn personal_delete(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn personal_activar(ctx: Ctx) -> WsResponse {
-    let empleado_id = match ctx.data.get("empleado_id").and_then(|v| v.as_str()) {
-        Some(empleado_id) => empleado_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el empleado id"),
-    };
+    let payload: PersonalIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let empleado_id = match Uuid::parse_str(empleado_id) {
+    let empleado_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "El empleado_id no es un UUID válido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let mut tx = match ctx.state.pool.begin().await {

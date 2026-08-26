@@ -1,7 +1,8 @@
-use uuid::Uuid;
-
 use crate::{
-    models::administracion::sesion::SesionInfo,
+    models::{
+        administracion::{sesion::SesionInfo, usuario::UsuarioIdPayload},
+        validations::Validar,
+    },
     routes::protocol::{Ctx, WsResponse},
 };
 
@@ -18,14 +19,15 @@ pub async fn sessiones_read(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn sessiones_delete(ctx: Ctx) -> WsResponse {
-    let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
-        Some(usuario_id) => usuario_id,
-        None => return WsResponse::error(ctx.id, 400, &format!("Falta Usuario Id")),
-    };
+    let payload: UsuarioIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let usuario_id = match Uuid::parse_str(&usuario_id) {
+    let usuario_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, &format!("Usuario_id no valido")),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     ctx.state.sessions.eliminar_por_usuario(usuario_id);

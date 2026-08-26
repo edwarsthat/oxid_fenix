@@ -1,7 +1,10 @@
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::{
-    models::proveedores::proveedores::{Proveedor, ProveedorNuevo, ProveedoresFiltros},
+    models::proveedores::proveedores::{
+        Proveedor, ProveedorActualizado, ProveedorNuevo, ProveedoresFiltros,
+    },
     services::error::ServiceError,
 };
 
@@ -146,4 +149,177 @@ pub async fn get_proveedores(
     .await?;
 
     Ok(proveedores)
+}
+
+async fn distinguir_fallo_update(
+    conexion: &mut sqlx::PgConnection,
+    proveedor_id: Uuid,
+) -> ServiceError {
+    let existe = sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM proveedores WHERE id = $1)",
+        proveedor_id
+    )
+    .fetch_one(conexion)
+    .await;
+
+    match existe {
+        Ok(Some(true)) => ServiceError::VersionDesactualizada(
+            "El proveedor fue modificado por otro usuario, recarga los datos".into(),
+        ),
+        Ok(_) => ServiceError::NotFound("Proveedor no encontrado".into()),
+        Err(err) => ServiceError::from(err),
+    }
+}
+
+pub async fn update_proveedor(
+    conexion: &mut sqlx::PgConnection,
+    actualizado: ProveedorActualizado,
+) -> Result<Proveedor, ServiceError> {
+    let ProveedorActualizado {
+        proveedor_id,
+        version,
+        datos,
+    } = actualizado;
+
+    // codigo y activo quedan fuera del SET: el consecutivo no se reescribe y
+    // dar de baja es otra operación. version tampoco se toca: la sube el
+    // trigger de la tabla.
+    let resultado = sqlx::query_as!(
+        Proveedor,
+        r#"
+        UPDATE proveedores
+        SET tipo_proveedor = $3, tipo_persona = $4, tipo_documento = $5, documento = $6,
+            digito_verificacion = $7, nombre = $8, razon_social = $9,
+            telefono = $10, telefono_alterno = $11, email = $12, direccion = $13,
+            departamento = $14, municipio = $15, contacto_nombre = $16, contacto_telefono = $17,
+            banco = $18, tipo_cuenta = $19, numero_cuenta = $20, titular_cuenta = $21,
+            titular_documento = $22, observaciones = $23
+        WHERE id = $1 AND version = $2
+        RETURNING id, codigo, tipo_proveedor, tipo_persona, tipo_documento, documento,
+                  digito_verificacion, nombre, razon_social,
+                  telefono, telefono_alterno, email, direccion,
+                  departamento, municipio, contacto_nombre, contacto_telefono,
+                  banco, tipo_cuenta, numero_cuenta, titular_cuenta,
+                  titular_documento, observaciones,
+                  activo, version, creado_en, actualizado_en
+        "#,
+        proveedor_id,
+        version,
+        datos.tipo_proveedor,
+        datos.tipo_persona,
+        datos.tipo_documento,
+        datos.documento,
+        datos.digito_verificacion,
+        datos.nombre,
+        datos.razon_social,
+        datos.telefono,
+        datos.telefono_alterno,
+        datos.email,
+        datos.direccion,
+        datos.departamento,
+        datos.municipio,
+        datos.contacto_nombre,
+        datos.contacto_telefono,
+        datos.banco,
+        datos.tipo_cuenta,
+        datos.numero_cuenta,
+        datos.titular_cuenta,
+        datos.titular_documento,
+        datos.observaciones,
+    )
+    .fetch_one(&mut *conexion)
+    .await;
+
+    match resultado {
+        Ok(proveedor) => Ok(proveedor),
+        // El guard de version hace que "no existe" y "te ganaron de mano"
+        // lleguen igual, como RowNotFound; hay que separarlos.
+        Err(sqlx::Error::RowNotFound) => Err(distinguir_fallo_update(conexion, proveedor_id).await),
+        Err(err) => Err(map_conflicto_proveedor(err)),
+    }
+}
+
+/// Baja lógica: el proveedor queda con `activo = FALSE` y no se borra la fila,
+/// porque las compras que ya se le hicieron lo siguen referenciando.
+pub async fn delete_proveedor<'e, E>(
+    executor: E,
+    proveedor_id: Uuid,
+) -> Result<Proveedor, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    // El guard `activo = TRUE` hace idempotente la operación: dar de baja dos
+    // veces no vuelve a mover `actualizado_en` ni a subir la version, y la
+    // segunda vez la fila no sale del UPDATE.
+    let proveedor_retirado = sqlx::query_as!(
+        Proveedor,
+        r#"
+        UPDATE proveedores
+        SET activo = FALSE
+        WHERE id = $1 AND activo = TRUE
+        RETURNING id, codigo, tipo_proveedor, tipo_persona, tipo_documento, documento,
+                  digito_verificacion, nombre, razon_social,
+                  telefono, telefono_alterno, email, direccion,
+                  departamento, municipio, contacto_nombre, contacto_telefono,
+                  banco, tipo_cuenta, numero_cuenta, titular_cuenta,
+                  titular_documento, observaciones,
+                  activo, version, creado_en, actualizado_en
+        "#,
+        proveedor_id,
+    )
+    .fetch_one(executor)
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => {
+            ServiceError::NotFound("proveedor no encontrado o ya está inactivo".into())
+        }
+        err => map_conflicto_proveedor(err),
+    })?;
+
+    Ok(proveedor_retirado)
+}
+
+/// Reactivación: revierte la baja lógica de [`delete_proveedor`].
+///
+/// Solo se toca `activo`; el resto de los datos quedan como estaban al darlo de
+/// baja, porque el proveedor que vuelve es el mismo y su historial de compras
+/// sigue colgado de esta fila. Si algo cambió mientras estuvo inactivo, eso es
+/// un `update` aparte.
+///
+/// El guard `activo = FALSE` hace idempotente la operación: reactivar a uno que
+/// ya está activo no mueve `actualizado_en` ni sube la version, y la fila no
+/// sale del UPDATE.
+pub async fn activar_proveedor<'e, E>(
+    executor: E,
+    proveedor_id: Uuid,
+) -> Result<Proveedor, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let proveedor_activado = sqlx::query_as!(
+        Proveedor,
+        r#"
+        UPDATE proveedores
+        SET activo = TRUE
+        WHERE id = $1 AND activo = FALSE
+        RETURNING id, codigo, tipo_proveedor, tipo_persona, tipo_documento, documento,
+                  digito_verificacion, nombre, razon_social,
+                  telefono, telefono_alterno, email, direccion,
+                  departamento, municipio, contacto_nombre, contacto_telefono,
+                  banco, tipo_cuenta, numero_cuenta, titular_cuenta,
+                  titular_documento, observaciones,
+                  activo, version, creado_en, actualizado_en
+        "#,
+        proveedor_id,
+    )
+    .fetch_one(executor)
+    .await
+    .map_err(|err| match err {
+        sqlx::Error::RowNotFound => {
+            ServiceError::NotFound("proveedor no encontrado o ya está activo".into())
+        }
+        err => map_conflicto_proveedor(err),
+    })?;
+
+    Ok(proveedor_activado)
 }

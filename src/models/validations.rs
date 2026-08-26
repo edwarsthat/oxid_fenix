@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use uuid::Uuid;
 
 pub const LIMITE_POR_DEFECTO: i64 = 500;
 pub const LIMITE_MAXIMO: i64 = 1000;
@@ -100,6 +101,28 @@ pub fn texto_opcional(
         None | Some("") => Ok(None),
         Some(valor) => Ok(Some(texto_obligatorio(valor, campo, maximo)?)),
     }
+}
+
+/// Los ids llegan como texto (el cliente manda JSON), así que el parseo y su
+/// error son los mismos para todos: se resuelven en un solo lugar.
+pub fn uuid_obligatorio(valor: &str, campo: &str) -> Result<Uuid, ValidacionError> {
+    Uuid::parse_str(valor.trim())
+        .map_err(|_| ValidacionError::nuevo(format!("el {campo} no es un UUID válido")))
+}
+
+/// Igual que `uuid_obligatorio`, pero la ausencia del id no es un error.
+pub fn uuid_opcional(valor: Option<String>, campo: &str) -> Result<Option<Uuid>, ValidacionError> {
+    valor
+        .map(|texto| uuid_obligatorio(&texto, campo))
+        .transpose()
+}
+
+/// Para el id que viaja como campo suelto del payload: si el cliente lo omite,
+/// el error lo damos nosotros en español en vez del "missing field" de serde.
+pub fn uuid_requerido(valor: Option<String>, campo: &str) -> Result<Uuid, ValidacionError> {
+    let valor = valor.ok_or_else(|| ValidacionError::nuevo(format!("falta el {campo}")))?;
+
+    uuid_obligatorio(&valor, campo)
 }
 
 pub fn limitar(limite: Option<i64>) -> i64 {

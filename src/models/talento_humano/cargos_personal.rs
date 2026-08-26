@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::models::validations::ValidacionError;
+use crate::models::validations::{ValidacionError, Validar, uuid_obligatorio, uuid_requerido};
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct CargoPersonal {
@@ -50,6 +50,20 @@ fn normalizar(nombre: &str, tipo_contrato: &str) -> Result<CargoPersonal, Valida
     })
 }
 
+/// Payload de las operaciones que solo señalan a un cargo (eliminar, activar).
+#[derive(Debug, Deserialize)]
+pub struct CargoPersonalIdPayload {
+    pub cargo_id: Option<String>,
+}
+
+impl Validar for CargoPersonalIdPayload {
+    type Datos = Uuid;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        uuid_requerido(self.cargo_id, "cargo_id")
+    }
+}
+
 impl CargoPersonalAddPayload {
     pub fn validar(&self) -> Result<CargoPersonal, ValidacionError> {
         normalizar(&self.nombre, &self.tipo_contrato)
@@ -58,12 +72,7 @@ impl CargoPersonalAddPayload {
 
 impl CargoPersonalUpdatePayload {
     pub fn validar(&self) -> Result<CargoPersonal, ValidacionError> {
-        let cargo_id = match Uuid::parse_str(&self.cargo_id) {
-            Ok(id) => id,
-            Err(_) => {
-                return Err(ValidacionError::nuevo("El cargo_id no es un UUID válido"));
-            }
-        };
+        let cargo_id = uuid_obligatorio(&self.cargo_id, "cargo_id")?;
 
         let mut cargo_personal = normalizar(&self.nombre, &self.tipo_contrato)?;
         cargo_personal.id = cargo_id;

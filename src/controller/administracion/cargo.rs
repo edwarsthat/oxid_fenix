@@ -1,6 +1,5 @@
-use uuid::Uuid;
-
 use crate::{
+    models::{administracion::cargo::CargoIdPayload, validations::Validar},
     routes::protocol::{Ctx, WsResponse},
     services::{
         administracion::{
@@ -19,14 +18,15 @@ pub async fn cargos_read(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn cargo_permisos_read(ctx: Ctx) -> WsResponse {
-    let cargo_id = match ctx.data.get("cargo_id").and_then(|v| v.as_str()) {
-        Some(cargo_id) => cargo_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el cargo"),
-    };
+    let payload: CargoIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let cargo_id: Uuid = match Uuid::parse_str(cargo_id) {
+    let cargo_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id no valido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let permisos = match get_permisos_de_cargo(&ctx.state.pool, cargo_id).await {
@@ -121,14 +121,15 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
         None => return WsResponse::error(ctx.id, 400, "Error permisos no validos"),
     };
 
-    let cargo_id = match ctx.data.get("cargo_id").and_then(|v| v.as_str()) {
-        Some(cargo_id) => cargo_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el cargo"),
-    };
+    let payload: CargoIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let cargo_id: Uuid = match Uuid::parse_str(cargo_id) {
+    let cargo_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id no valido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let mut tx = match ctx.state.pool.begin().await {
@@ -173,14 +174,15 @@ pub async fn cargos_update(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn cargos_delete(ctx: Ctx) -> WsResponse {
-    let cargo_id = match ctx.data.get("cargo_id").and_then(|v| v.as_str()) {
-        Some(cargo_id) => cargo_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el cargo"),
-    };
+    let payload: CargoIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let cargo_id: Uuid = match Uuid::parse_str(cargo_id) {
+    let cargo_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "cargo_id no valido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let mut tx = match ctx.state.pool.begin().await {
@@ -231,6 +233,7 @@ mod tests {
     use std::collections::HashSet;
     use std::sync::Arc;
     use tokio::sync::broadcast;
+    use uuid::Uuid;
 
     fn ctx_de_prueba(data: serde_json::Value) -> Ctx {
         // connect_lazy no abre conexión real: alcanza para las validaciones,
@@ -261,7 +264,7 @@ mod tests {
         let resp = cargo_permisos_read(ctx).await;
 
         assert_eq!(resp.status, 400);
-        assert_eq!(resp.message, "Falta el cargo");
+        assert_eq!(resp.message, "Datos invalidos: falta el cargo_id");
     }
 
     #[tokio::test]
@@ -271,7 +274,10 @@ mod tests {
         let resp = cargo_permisos_read(ctx).await;
 
         assert_eq!(resp.status, 400);
-        assert_eq!(resp.message, "cargo_id no valido");
+        assert_eq!(
+            resp.message,
+            "Datos invalidos: el cargo_id no es un UUID válido"
+        );
     }
 
     // ── cargos_add ───────────────────────────────────────
@@ -357,7 +363,7 @@ mod tests {
         let resp = cargos_update(ctx).await;
 
         assert_eq!(resp.status, 400);
-        assert_eq!(resp.message, "Falta el cargo");
+        assert_eq!(resp.message, "Datos invalidos: falta el cargo_id");
     }
 
     #[tokio::test]
@@ -372,7 +378,10 @@ mod tests {
         let resp = cargos_update(ctx).await;
 
         assert_eq!(resp.status, 400);
-        assert_eq!(resp.message, "cargo_id no valido");
+        assert_eq!(
+            resp.message,
+            "Datos invalidos: el cargo_id no es un UUID válido"
+        );
     }
 
     // ── cargos_delete ────────────────────────────────────
@@ -384,7 +393,7 @@ mod tests {
         let resp = cargos_delete(ctx).await;
 
         assert_eq!(resp.status, 400);
-        assert_eq!(resp.message, "Falta el cargo");
+        assert_eq!(resp.message, "Datos invalidos: falta el cargo_id");
     }
 
     #[tokio::test]
@@ -394,6 +403,9 @@ mod tests {
         let resp = cargos_delete(ctx).await;
 
         assert_eq!(resp.status, 400);
-        assert_eq!(resp.message, "cargo_id no valido");
+        assert_eq!(
+            resp.message,
+            "Datos invalidos: el cargo_id no es un UUID válido"
+        );
     }
 }

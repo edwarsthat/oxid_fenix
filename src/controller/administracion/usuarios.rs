@@ -1,9 +1,10 @@
 use std::{collections::HashSet, sync::Arc};
 
-use uuid::Uuid;
-
 use crate::{
-    models::administracion::usuario::{UsuariosAddPayload, UsuariosUpdatePayload},
+    models::{
+        administracion::usuario::{UsuarioIdPayload, UsuariosAddPayload, UsuariosUpdatePayload},
+        validations::Validar,
+    },
     routes::protocol::{Ctx, WsResponse},
     security::password::{generar_temporal, hashear},
     services::{
@@ -181,14 +182,15 @@ pub async fn usuarios_update(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn usuarios_delete(ctx: Ctx) -> WsResponse {
-    let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
-        Some(usuario_id) => usuario_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el usuario id"),
-    };
+    let payload: UsuarioIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let usuario_id: Uuid = match Uuid::parse_str(&usuario_id) {
+    let usuario_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "Usuario invalido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let mut tx = match ctx.state.pool.begin().await {
@@ -230,14 +232,15 @@ pub async fn usuarios_delete(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn usuarios_new_password(ctx: Ctx) -> WsResponse {
-    let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
-        Some(usuario_id) => usuario_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el usuario id"),
-    };
+    let payload: UsuarioIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let usuario_id: Uuid = match Uuid::parse_str(&usuario_id) {
+    let usuario_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "Usuario invalido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let password = generar_temporal();
@@ -280,14 +283,15 @@ pub async fn usuarios_new_password(ctx: Ctx) -> WsResponse {
 }
 
 pub async fn usuarios_activar(ctx: Ctx) -> WsResponse {
-    let usuario_id = match ctx.data.get("usuario_id").and_then(|v| v.as_str()) {
-        Some(usuario_id) => usuario_id,
-        None => return WsResponse::error(ctx.id, 400, "Falta el usuario id"),
-    };
+    let payload: UsuarioIdPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
 
-    let usuario_id: Uuid = match Uuid::parse_str(&usuario_id) {
+    let usuario_id = match payload.validar() {
         Ok(id) => id,
-        Err(_) => return WsResponse::error(ctx.id, 400, "usuario_id no valido"),
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
     };
 
     let password = generar_temporal();
