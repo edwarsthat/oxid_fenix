@@ -1,0 +1,131 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, codigo, nombre, horas_maximas_espera,\n               rendimiento_esperado_pct::float8 AS \"rendimiento_esperado_pct\",\n               rendimiento_min_pct::float8      AS \"rendimiento_min_pct\",\n               rendimiento_max_pct::float8      AS \"rendimiento_max_pct\",\n               activo, version, creado_en, actualizado_en\n        FROM materias_primas\n        ORDER BY nombre\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "codigo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "horas_maximas_espera",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "horas_maximas_espera"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "rendimiento_esperado_pct",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "rendimiento_min_pct",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "rendimiento_max_pct",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "activo",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "activo"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "actualizado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "actualizado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "45395b35de7c5937e511e3b69676e6401cd72d67c959359fdd4842c12c250421"
+}

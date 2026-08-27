@@ -2,6 +2,7 @@ pub mod cargo_personal;
 pub mod cargos;
 pub mod cargos_permisos;
 pub mod error;
+pub mod materias_primas;
 pub mod permisos;
 pub mod usuarios;
 
@@ -17,6 +18,7 @@ pub async fn run_all(pool: &PgPool) -> Result<(), SeedError> {
     cargos_permisos::seed(pool).await?;
     usuarios::seed(pool).await?;
     cargo_personal::seed(pool).await?;
+    materias_primas::seed(pool).await?;
 
     println!("[seed] siembra completada.");
     Ok(())

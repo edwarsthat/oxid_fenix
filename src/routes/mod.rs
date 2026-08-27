@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod administracion;
+pub mod catalogos;
 pub mod dispatcher;
 pub mod inventarios;
 pub mod protocol;
