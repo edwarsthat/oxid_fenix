@@ -24,6 +24,9 @@ const MODULOS: &[(&str, &[&str])] = &[
     ("llaves_nfc", CRUD),
     //proveedores
     ("proveedores", CRUD),
+    // Por ahora solo el alta: el resto del CRUD de predios no tiene endpoint.
+    ("predios", &["add"]),
+    ("predios", CRUD),
     //catalogos
     ("materias_primas", &["read"]),
 ];

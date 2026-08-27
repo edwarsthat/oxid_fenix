@@ -33,6 +33,12 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::proveedores::proveedores_activar(ctx).await
         }
+        "predios:add" => {
+            if !ctx.permisos.contains("predios:add") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::predios::predios_add(ctx).await
+        }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }
