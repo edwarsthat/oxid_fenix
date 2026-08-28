@@ -4,7 +4,8 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::models::validations::{
-    ValidacionError, Validar, texto_obligatorio, texto_opcional, uuid_requerido,
+    LIMITE_MAXIMO, ValidacionError, Validar, limpiar_busqueda, texto_obligatorio, texto_opcional,
+    uuid_obligatorio, uuid_opcional, uuid_requerido,
 };
 
 #[derive(Debug, FromRow, Serialize)]
@@ -70,21 +71,57 @@ pub struct PredioNuevo {
     pub observaciones: Option<String>,
 }
 
+/// Lo que manda el cliente.
 #[derive(Debug, Deserialize)]
 pub struct PrediosReadPayload {
     pub activo: Option<bool>,
-    pub proveedor_id: Option<Uuid>,
+    pub proveedor_id: Option<String>,
     pub busqueda: Option<String>,
     pub departamento: Option<String>,
 }
 
+/// Lo que devuelve validar() y consume el servicio.
 #[derive(Debug)]
 pub struct PrediosFiltros {
-    pub activo: Option<bool>,
+    pub activo: bool,
     pub proveedor_id: Option<Uuid>,
     pub busqueda: Option<String>,
     pub departamento: Option<String>,
     pub limite: i64,
+}
+
+/// Lo que manda el cliente para editar. Es un reemplazo completo: viajan todos
+/// los campos, no solo los que cambiaron, así que las reglas son las mismas del
+/// alta más el id y la version.
+#[derive(Debug, Deserialize)]
+pub struct PredioUpdatePayload {
+    pub predio_id: String,
+    pub proveedor_id: Option<String>,
+    pub nombre: String,
+    pub departamento: String,
+    pub municipio: String,
+    pub vereda: Option<String>,
+    pub referencia_ubicacion: Option<String>,
+    pub latitud: Option<String>,
+    pub longitud: Option<String>,
+    pub responsable_nombre: Option<String>,
+    pub responsable_documento: Option<String>,
+    pub responsable_telefono: Option<String>,
+    pub observaciones: Option<String>,
+    pub version: i32,
+}
+
+/// Lo que devuelve validar() y consume el servicio.
+#[derive(Debug)]
+pub struct PredioActualizado {
+    pub predio_id: Uuid,
+    pub version: i32,
+    pub datos: PredioNuevo,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PredioIdPayload {
+    pub predio_id: Option<String>,
 }
 /// Parsea una coordenada que llega como texto y la acota a su rango. El CHECK
 /// de la tabla la atraparía igual, pero como 23514 genérico: validarla acá deja
@@ -175,6 +212,92 @@ impl Validar for PredioAddPayload {
             responsable_telefono,
             observaciones,
         })
+    }
+}
+
+impl Validar for PrediosReadPayload {
+    type Datos = PrediosFiltros;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        // Por defecto el listado trae los predios vigentes: los dados de baja
+        // se piden a propósito, no se cuelan en la vista de todos los días.
+        let activo = self.activo.unwrap_or(true);
+
+        // El id llega como texto igual que en el alta: un uuid mal escrito es
+        // un error con mensaje propio y no un listado vacío.
+        let proveedor_id = uuid_opcional(self.proveedor_id, "proveedor_id")?;
+
+        // Filtro de texto, no columna a guardar: va por `limpiar_busqueda` para
+        // que un '%' escrito por el usuario no se lea como comodín del LIKE.
+        let busqueda = match self.busqueda {
+            Some(texto) => limpiar_busqueda(&texto),
+            None => None,
+        };
+
+        // El departamento no tiene lista cerrada: se guarda como lo escribieron,
+        // así que acá solo se recorta y se corta en el largo de la columna. El
+        // servicio lo compara completo, sin comodines alrededor.
+        let departamento = texto_opcional(self.departamento.as_deref(), "departamento", 80)?;
+
+        let limite = LIMITE_MAXIMO;
+
+        Ok(PrediosFiltros {
+            activo,
+            proveedor_id,
+            busqueda,
+            departamento,
+            limite,
+        })
+    }
+}
+
+impl Validar for PredioUpdatePayload {
+    type Datos = PredioActualizado;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        // La tabla arranca en 1 y solo sube; un valor menor no salió de un read.
+        if self.version < 1 {
+            return Err(ValidacionError::nuevo(
+                "la version del predio no es válida, recarga los datos",
+            ));
+        }
+
+        let predio_id = uuid_obligatorio(&self.predio_id, "predio_id")?;
+        let version = self.version;
+
+        // Las reglas de los campos son idénticas a las del alta, así que se
+        // reusan en vez de repetirse: si cambia un largo o la regla de las
+        // coordenadas, cambia en un solo lugar. El proveedor_id va incluido:
+        // un predio se puede reasignar, pero nunca quedar sin proveedor.
+        let datos = PredioAddPayload {
+            proveedor_id: self.proveedor_id,
+            nombre: self.nombre,
+            departamento: self.departamento,
+            municipio: self.municipio,
+            vereda: self.vereda,
+            referencia_ubicacion: self.referencia_ubicacion,
+            latitud: self.latitud,
+            longitud: self.longitud,
+            responsable_nombre: self.responsable_nombre,
+            responsable_documento: self.responsable_documento,
+            responsable_telefono: self.responsable_telefono,
+            observaciones: self.observaciones,
+        }
+        .validar()?;
+
+        Ok(PredioActualizado {
+            predio_id,
+            version,
+            datos,
+        })
+    }
+}
+
+impl Validar for PredioIdPayload {
+    type Datos = Uuid;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        uuid_requerido(self.predio_id, "predio_id")
     }
 }
 
@@ -348,6 +471,200 @@ mod tests {
         assert_eq!(
             payload.validar().unwrap_err().mensaje(),
             "el campo nombre no puede superar 200 caracteres"
+        );
+    }
+
+    fn read_payload() -> PrediosReadPayload {
+        PrediosReadPayload {
+            activo: None,
+            proveedor_id: None,
+            busqueda: None,
+            departamento: None,
+        }
+    }
+
+    /// Sin `activo` el listado trae los vigentes: los dados de baja se piden.
+    #[test]
+    fn los_filtros_traen_los_activos_por_defecto() {
+        let filtros = read_payload().validar().expect("deberia ser valido");
+
+        assert!(filtros.activo);
+        assert_eq!(filtros.proveedor_id, None);
+        assert_eq!(filtros.limite, LIMITE_MAXIMO);
+
+        let payload = PrediosReadPayload {
+            activo: Some(false),
+            ..read_payload()
+        };
+
+        assert!(!payload.validar().expect("deberia ser valido").activo);
+    }
+
+    #[test]
+    fn los_filtros_normalizan_proveedor_id_y_departamento() {
+        let id = Uuid::new_v4();
+        let payload = PrediosReadPayload {
+            proveedor_id: Some(format!("  {id}  ")),
+            departamento: Some("  Valle del Cauca  ".into()),
+            ..read_payload()
+        };
+
+        let filtros = payload.validar().expect("deberia ser valido");
+
+        assert_eq!(filtros.proveedor_id, Some(id));
+        assert_eq!(filtros.departamento.as_deref(), Some("Valle del Cauca"));
+    }
+
+    /// Un filtro en blanco es "sin filtro", no un texto vacío que no matchea.
+    #[test]
+    fn los_filtros_en_blanco_quedan_en_none() {
+        let payload = PrediosReadPayload {
+            busqueda: Some("   ".into()),
+            departamento: Some("".into()),
+            ..read_payload()
+        };
+
+        let filtros = payload.validar().expect("deberia ser valido");
+
+        assert_eq!(filtros.busqueda, None);
+        assert_eq!(filtros.departamento, None);
+    }
+
+    /// El '%' que escriba el usuario se busca literal, no como comodín del LIKE.
+    #[test]
+    fn la_busqueda_escapa_los_comodines() {
+        let payload = PrediosReadPayload {
+            busqueda: Some(" 100% finca_1 ".into()),
+            ..read_payload()
+        };
+
+        let filtros = payload.validar().expect("deberia ser valido");
+
+        assert_eq!(filtros.busqueda.as_deref(), Some("100\\% finca\\_1"));
+    }
+
+    /// Un uuid mal escrito es un error con mensaje propio, no un listado vacío.
+    #[test]
+    fn los_filtros_rechazan_un_proveedor_id_invalido() {
+        let payload = PrediosReadPayload {
+            proveedor_id: Some("no-es-un-uuid".into()),
+            ..read_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "el proveedor_id no es un UUID válido"
+        );
+    }
+
+    fn update_payload() -> PredioUpdatePayload {
+        PredioUpdatePayload {
+            predio_id: Uuid::new_v4().to_string(),
+            proveedor_id: Some(Uuid::new_v4().to_string()),
+            nombre: "La Esperanza".into(),
+            departamento: "Valle del Cauca".into(),
+            municipio: "Palmira".into(),
+            vereda: None,
+            referencia_ubicacion: None,
+            latitud: None,
+            longitud: None,
+            responsable_nombre: None,
+            responsable_documento: None,
+            responsable_telefono: None,
+            observaciones: None,
+            version: 1,
+        }
+    }
+
+    #[test]
+    fn validar_devuelve_id_version_y_datos_normalizados() {
+        let predio_id = Uuid::new_v4();
+        let proveedor_id = Uuid::new_v4();
+        let payload = PredioUpdatePayload {
+            predio_id: format!("  {predio_id}  "),
+            proveedor_id: Some(proveedor_id.to_string()),
+            nombre: "  La Esperanza  ".into(),
+            latitud: Some(" 3.539444 ".into()),
+            longitud: Some("-76.303889".into()),
+            version: 4,
+            ..update_payload()
+        };
+
+        let actualizado = payload.validar().expect("deberia ser valido");
+
+        assert_eq!(actualizado.predio_id, predio_id);
+        assert_eq!(actualizado.version, 4);
+        assert_eq!(actualizado.datos.proveedor_id, proveedor_id);
+        assert_eq!(actualizado.datos.nombre, "La Esperanza");
+        assert_eq!(actualizado.datos.latitud, Some(3.539444));
+        assert_eq!(actualizado.datos.longitud, Some(-76.303889));
+    }
+
+    #[test]
+    fn validar_rechaza_una_version_menor_a_uno() {
+        let payload = PredioUpdatePayload {
+            version: 0,
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "la version del predio no es válida, recarga los datos"
+        );
+    }
+
+    /// La version se valida antes que el resto: quien manda datos viejos tiene
+    /// que recargar, no corregir campo por campo.
+    #[test]
+    fn la_version_se_valida_antes_que_los_campos() {
+        let payload = PredioUpdatePayload {
+            version: 0,
+            nombre: "   ".into(),
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "la version del predio no es válida, recarga los datos"
+        );
+    }
+
+    #[test]
+    fn validar_rechaza_un_predio_id_invalido() {
+        let payload = PredioUpdatePayload {
+            predio_id: "no-es-un-uuid".into(),
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "el predio_id no es un UUID válido"
+        );
+    }
+
+    /// El update reusa las reglas del alta: un predio no puede quedar sin
+    /// proveedor ni con media coordenada.
+    #[test]
+    fn el_update_hereda_las_reglas_del_alta() {
+        let payload = PredioUpdatePayload {
+            proveedor_id: None,
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "falta el proveedor_id"
+        );
+
+        let payload = PredioUpdatePayload {
+            latitud: Some("3.539444".into()),
+            longitud: None,
+            ..update_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "la latitud y la longitud van juntas: falta una de las dos"
         );
     }
 }

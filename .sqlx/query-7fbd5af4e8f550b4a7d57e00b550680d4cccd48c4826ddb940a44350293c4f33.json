@@ -1,0 +1,226 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, codigo, proveedor_id, nombre, departamento, municipio, vereda,\n               referencia_ubicacion,\n               latitud::float8  AS \"latitud\",\n               longitud::float8 AS \"longitud\",\n               responsable_nombre, responsable_documento, responsable_telefono,\n               observaciones, activo, version, creado_en, actualizado_en\n        FROM predios\n        WHERE activo = $1\n          -- El filtro de todos los días: los predios de un proveedor al momento\n          -- de registrar una recepción. Va por el índice `idx_predios_proveedor`.\n          AND ($2::uuid IS NULL OR proveedor_id = $2)\n          -- Igualdad, no un LIKE: el departamento se filtra por el valor\n          -- completo. Va por `lower()` en los dos lados porque la columna se\n          -- guarda como la escribieron y \"Antioquia\" tiene que encontrar\n          -- también a \"ANTIOQUIA\".\n          AND ($3::text IS NULL OR lower(departamento) = lower($3))\n          -- La búsqueda cubre lo que un humano tiene a mano del predio: cómo le\n          -- dicen a la finca, el consecutivo, dónde queda y quién la atiende.\n          -- Los que no tienen vereda ni responsable no se pierden: los otros OR\n          -- se siguen evaluando.\n          AND ($4::text IS NULL\n               OR nombre             ILIKE '%' || $4 || '%'\n               OR codigo             ILIKE '%' || $4 || '%'\n               OR municipio          ILIKE '%' || $4 || '%'\n               OR vereda             ILIKE '%' || $4 || '%'\n               OR responsable_nombre ILIKE '%' || $4 || '%')\n        ORDER BY creado_en DESC, id DESC\n        LIMIT $5\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "codigo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "proveedor_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "proveedor_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "departamento",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "departamento"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "municipio",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "municipio"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "vereda",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "vereda"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "referencia_ubicacion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "referencia_ubicacion"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "latitud",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "longitud",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "responsable_nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "responsable_nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "responsable_documento",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "responsable_documento"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "responsable_telefono",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "responsable_telefono"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "observaciones",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "observaciones"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "activo",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "activo"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "actualizado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "actualizado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null,
+      null,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7fbd5af4e8f550b4a7d57e00b550680d4cccd48c4826ddb940a44350293c4f33"
+}
