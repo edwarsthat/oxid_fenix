@@ -18,7 +18,7 @@ pub async fn seed(pool: &PgPool) -> Result<(), SeedError> {
     )
     .bind("Admin")
     .bind("Principal")
-    .bind("edwarsthat@gmail.com")
+    .bind("admin@agrofenix.com")
     .bind("admin")
     .bind(&hash)
     .bind(cargo_id)
@@ -27,7 +27,7 @@ pub async fn seed(pool: &PgPool) -> Result<(), SeedError> {
     .await?;
 
     if res.rows_affected() == 0 {
-        println!("[seed::usuarios] 'admin@celifrut.com' ya existía.");
+        println!("[seed::usuarios] 'admin@agrofenix.com' ya existía.");
     } else {
         println!("[seed::usuarios] admin creado");
     }
