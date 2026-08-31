@@ -7,6 +7,7 @@ use axum::{
         ws::{WebSocket, WebSocketUpgrade},
     },
     http::HeaderMap,
+    middleware,
     response::IntoResponse,
     routing::{get, post},
 };
@@ -18,6 +19,7 @@ use crate::{
     app::error::WsError,
     controller::sistema::auth::{change_password, login},
     routes::protocol::Evento,
+    security::rate_limit::{RateLimiter, limitar},
     sessions::memory::{Session, SessionStore},
 };
 
@@ -28,12 +30,50 @@ pub struct AppState {
     pub eventos: broadcast::Sender<Arc<Evento>>,
 }
 
+/// Límite por IP de cada endpoint, en (pico de golpe, ritmo sostenido por minuto).
+///
+/// El pico es lo que se tolera de una tacada con la cubeta llena; el ritmo es lo
+/// que queda una vez agotado. Los dos números conviven: un cliente puede gastar
+/// el pico entero y después sigue pasando al ritmo sostenido.
+mod limites {
+    /// Es el endpoint más barato del servicio y lo consulta el monitoreo, así
+    /// que va holgado; el tope está para que no sirva de ping flood gratis.
+    pub const HEALTH: (u32, u32) = (60, 60);
+
+    /// `login` y `cambiar-password` pagan un argon2 por intento (~50-100 ms de
+    /// CPU) y son el blanco natural de la fuerza bruta: van al ritmo más bajo.
+    /// `cambiar-password` gasta dos hashes por llamada (verifica el actual y
+    /// hashea el nuevo), de ahí que no sea más permisivo que el login.
+    pub const LOGIN: (u32, u32) = (5, 5);
+    pub const CAMBIAR_PASSWORD: (u32, u32) = (5, 5);
+
+    /// Esto limita el handshake del websocket, no los mensajes de un socket ya
+    /// abierto. Deja margen para reconexiones cuando se cae la red, pero corta
+    /// el ciclo de abrir y cerrar conexiones sin parar.
+    pub const WS: (u32, u32) = (20, 20);
+}
+
+/// Cada endpoint estrena su propia cubeta: gastar el cupo de `/health` no puede
+/// dejar a nadie fuera de `/login`.
+macro_rules! rate_limit {
+    ($limite:expr) => {{
+        let (pico, por_minuto) = $limite;
+        middleware::from_fn_with_state(RateLimiter::por_minuto(pico, por_minuto), limitar)
+    }};
+}
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
-        .route("/health", get(health))
-        .route("/login", post(login))
-        .route("/cambiar-password", post(change_password))
-        .route("/ws", get(ws_handler))
+        .route("/health", get(health).layer(rate_limit!(limites::HEALTH)))
+        .route("/login", post(login).layer(rate_limit!(limites::LOGIN)))
+        .route(
+            "/cambiar-password",
+            post(change_password).layer(rate_limit!(limites::CAMBIAR_PASSWORD)),
+        )
+        .route("/ws", get(ws_handler).layer(rate_limit!(limites::WS)))
+        // OJO: el orden importa. `.layer()` sobre el `MethodRouter` deja el
+        // límite por delante del handler, así que un login de más se corta
+        // antes de tocar la base de datos y antes de pagar el argon2.
         .with_state(state)
 }
 

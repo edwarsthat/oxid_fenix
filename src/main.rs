@@ -37,7 +37,14 @@ async fn run() -> Result<(), AppError> {
     let addr = SocketAddr::new(bind_addr()?, port()?);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("escuchando en http://{}", listener.local_addr()?);
-    axum::serve(listener, app).await?;
+    // `into_make_service_with_connect_info` es lo que hace llegar la IP del
+    // cliente hasta el rate limit. Sin esto todas las peticiones caerían en una
+    // única cubeta compartida.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
