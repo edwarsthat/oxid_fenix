@@ -125,7 +125,9 @@ impl RateLimiter {
         match estado.cubetas.entry(clave) {
             Entry::Occupied(mut e) => {
                 let cubeta = e.get_mut();
-                let transcurrido = ahora.saturating_duration_since(cubeta.visto_en).as_secs_f64();
+                let transcurrido = ahora
+                    .saturating_duration_since(cubeta.visto_en)
+                    .as_secs_f64();
                 cubeta.tokens = (cubeta.tokens + transcurrido * recarga).min(capacidad);
                 cubeta.visto_en = ahora;
 
@@ -155,7 +157,9 @@ impl RateLimiter {
     /// arranca con la cubeta llena.
     fn purgar(estado: &mut Estado, capacidad: f64, recarga: f64, ahora: Instant) {
         estado.cubetas.retain(|_, cubeta| {
-            let transcurrido = ahora.saturating_duration_since(cubeta.visto_en).as_secs_f64();
+            let transcurrido = ahora
+                .saturating_duration_since(cubeta.visto_en)
+                .as_secs_f64();
             cubeta.tokens + transcurrido * recarga < capacidad
         });
         estado.ultima_limpieza = ahora;
@@ -435,7 +439,10 @@ mod tests {
             pedir(&router, Some(mismo_host_otro_puerto)).await.status(),
             StatusCode::TOO_MANY_REQUESTS
         );
-        assert_eq!(pedir(&router, Some(otro_host)).await.status(), StatusCode::OK);
+        assert_eq!(
+            pedir(&router, Some(otro_host)).await.status(),
+            StatusCode::OK
+        );
     }
 
     #[tokio::test]

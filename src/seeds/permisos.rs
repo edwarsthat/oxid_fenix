@@ -22,6 +22,10 @@ const MODULOS: &[(&str, &[&str])] = &[
     ("personal", CRUD),
     //inventarios
     ("llaves_nfc", CRUD),
+    (
+        "lotes_materias_primas",
+        &["add", "read", "update", "anular"],
+    ),
     //proveedores
     ("proveedores", CRUD),
     ("predios", CRUD),

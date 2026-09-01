@@ -4,6 +4,16 @@ use uuid::Uuid;
 pub const LIMITE_POR_DEFECTO: i64 = 500;
 pub const LIMITE_MAXIMO: i64 = 1000;
 
+/// Tope de un NUMERIC(12,2), que es el tipo de todas las columnas de peso:
+/// diez dígitos enteros. Un número mayor no cabe y Postgres lo devolvería como
+/// 22003 (numeric field overflow), o sea un error 500 por un dato del cliente.
+pub const PESO_MAXIMO: f64 = 9_999_999_999.99;
+
+/// El valor más chico que sobrevive al redondeo a dos decimales. Cualquier cosa
+/// por debajo se guarda como 0.00, y ahí revienta el CHECK `> 0` de la columna
+/// con un 23514 que no dice nada útil.
+pub const PESO_MINIMO: f64 = 0.01;
+
 /// Error de validación de una entrada. Siempre es culpa del cliente → 400.
 /// No sabe nada de HTTP ni de WebSocket: cada transporte lo adapta.
 #[derive(Debug, thiserror::Error)]
@@ -123,6 +133,56 @@ pub fn uuid_requerido(valor: Option<String>, campo: &str) -> Result<Uuid, Valida
     let valor = valor.ok_or_else(|| ValidacionError::nuevo(format!("falta el {campo}")))?;
 
     uuid_obligatorio(&valor, campo)
+}
+
+/// Cantidad para una columna NUMERIC(12,2): finita, no negativa y dentro de lo
+/// que aguanta la columna. Admite el cero, para los campos que arrancan en 0
+/// (`peso_devuelto` y compañía).
+///
+/// Validar el rango acá y no dejárselo al INSERT es lo que convierte un 500 del
+/// driver en un 400 que dice cuál campo está mal.
+pub fn peso(valor: f64, campo: &str) -> Result<f64, ValidacionError> {
+    // NaN e infinito no entran por los `<`/`>` de abajo: NaN no es mayor ni
+    // menor que nada, así que se descarta primero y explícitamente.
+    if !valor.is_finite() {
+        return Err(ValidacionError::nuevo(format!(
+            "el {campo} debe ser un número"
+        )));
+    }
+
+    if valor < 0.0 {
+        return Err(ValidacionError::nuevo(format!(
+            "el {campo} no puede ser negativo"
+        )));
+    }
+
+    if valor > PESO_MAXIMO {
+        return Err(ValidacionError::nuevo(format!(
+            "el {campo} supera el máximo que admite la columna"
+        )));
+    }
+
+    Ok(valor)
+}
+
+/// Igual que `peso`, pero para las columnas con CHECK `> 0`. El mínimo no es
+/// cero sino `PESO_MINIMO`: un 0.004 pasaría el `> 0` de Rust y se guardaría
+/// como 0.00, reventando el CHECK ya dentro del INSERT.
+pub fn peso_positivo(valor: f64, campo: &str) -> Result<f64, ValidacionError> {
+    let valor = peso(valor, campo)?;
+
+    if valor < PESO_MINIMO {
+        return Err(ValidacionError::nuevo(format!(
+            "el {campo} debe ser mayor que cero"
+        )));
+    }
+
+    Ok(valor)
+}
+
+/// Igual que `peso`, pero para una columna que admite NULL.
+pub fn peso_opcional(valor: Option<f64>, campo: &str) -> Result<Option<f64>, ValidacionError> {
+    valor.map(|valor| peso(valor, campo)).transpose()
 }
 
 pub fn limitar(limite: Option<i64>) -> i64 {
