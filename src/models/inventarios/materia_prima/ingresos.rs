@@ -11,6 +11,19 @@ use crate::models::validations::{
 pub struct Ingreso {
     pub id: Uuid,
     pub codigo: String,
+
+    // La manda el cliente y es lo que hace idempotente el registro: si el de
+    // báscula le da dos veces al botón, o el celular reintenta porque se le
+    // cayó la señal justo después del INSERT, el segundo intento choca contra
+    // el UNIQUE de la columna y devuelve el lote que ya existe en vez de crear
+    // un gemelo. Un lote duplicado no es un renglón de más: es peso que nunca
+    // llegó sumando al saldo de patio y a la liquidación del proveedor.
+    //
+    // Es UUID y no texto libre para que dos terminales no puedan mandar la
+    // misma clave por casualidad ("1", "ingreso-hoy") y una termine tapando el
+    // ingreso de la otra.
+    pub clave_idempotencia: Uuid,
+
     pub predio_id: Uuid,
     pub materia_prima_id: Uuid,
     pub placa: String,
@@ -50,6 +63,19 @@ pub struct Ingreso {
     pub actualizado_en: DateTime<Utc>,
 }
 
+/// Lo que devuelve el alta: el lote, y si de verdad se creó en esta llamada.
+///
+/// El `bool` existe porque el reintento de un ingreso ya registrado NO es un
+/// error — la clave de idempotencia hace que devuelva el mismo lote — pero
+/// tampoco es un alta: sin distinguirlos, cada reintento escribiría otro
+/// renglón en la auditoría y volvería a emitir el evento, y la pantalla de
+/// patio mostraría el mismo camión dos veces.
+#[derive(Debug)]
+pub struct AltaIngreso {
+    pub ingreso: Ingreso,
+    pub creado: bool,
+}
+
 /// Lo que manda el cliente.
 ///
 /// Los ids y las fechas llegan como texto igual que en `predios`: si se
@@ -65,10 +91,17 @@ pub struct Ingreso {
 /// siguiente, así que derivar el día del instante daría la fecha equivocada
 /// justo en el turno de la noche.
 ///
+/// `clave_idempotencia` sí es obligatoria, y es la única que lo es sin que la
+/// pida el negocio: la genera el cliente UNA vez por ingreso (al abrir el
+/// formulario, no al enviarlo) y la repite en los reintentos. Sin ella no hay
+/// forma de distinguir "el mismo camión mandado dos veces" de "dos camiones
+/// iguales", y en báscula, con señal intermitente, el reintento es la norma.
+///
 /// `registrado_por` NO viaja acá: sale de la sesión (`ctx.user_id`), no de
 /// lo que diga el cliente.
 #[derive(Debug, Deserialize)]
 pub struct IngresoAddPayload {
+    pub clave_idempotencia: Option<String>,
     pub predio_id: Option<String>,
     pub materia_prima_id: Option<String>,
     pub placa: String,
@@ -92,6 +125,7 @@ pub struct IngresoAddPayload {
 /// servidor de base y no el del proceso.
 #[derive(Debug)]
 pub struct IngresoNuevo {
+    pub clave_idempotencia: Uuid,
     pub predio_id: Uuid,
     pub materia_prima_id: Uuid,
     pub placa: String,
@@ -161,6 +195,8 @@ impl Validar for IngresoAddPayload {
     type Datos = IngresoNuevo;
 
     fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        let clave_idempotencia = uuid_requerido(self.clave_idempotencia, "clave_idempotencia")?;
+
         let predio_id = uuid_requerido(self.predio_id, "predio_id")?;
         let materia_prima_id = uuid_requerido(self.materia_prima_id, "materia_prima_id")?;
 
@@ -220,6 +256,7 @@ impl Validar for IngresoAddPayload {
         }
 
         Ok(IngresoNuevo {
+            clave_idempotencia,
             predio_id,
             materia_prima_id,
             placa,
@@ -243,6 +280,7 @@ mod tests {
 
     fn add_payload() -> IngresoAddPayload {
         IngresoAddPayload {
+            clave_idempotencia: Some(Uuid::new_v4().to_string()),
             predio_id: Some(Uuid::new_v4().to_string()),
             materia_prima_id: Some(Uuid::new_v4().to_string()),
             placa: "ABC123".into(),
@@ -262,7 +300,9 @@ mod tests {
     fn validar_normaliza_y_devuelve_los_datos() {
         let predio_id = Uuid::new_v4();
         let materia_prima_id = Uuid::new_v4();
+        let clave_idempotencia = Uuid::new_v4();
         let payload = IngresoAddPayload {
+            clave_idempotencia: Some(format!("  {clave_idempotencia}  ")),
             predio_id: Some(format!("  {predio_id}  ")),
             materia_prima_id: Some(materia_prima_id.to_string()),
             placa: " abc-123 ".into(),
@@ -274,6 +314,7 @@ mod tests {
 
         let nuevo = payload.validar().expect("deberia ser valido");
 
+        assert_eq!(nuevo.clave_idempotencia, clave_idempotencia);
         assert_eq!(nuevo.predio_id, predio_id);
         assert_eq!(nuevo.materia_prima_id, materia_prima_id);
         assert_eq!(nuevo.placa, "ABC123");
@@ -349,6 +390,31 @@ mod tests {
         assert_eq!(
             payload.validar().unwrap_err().mensaje(),
             "el materia_prima_id no es un UUID válido"
+        );
+    }
+
+    /// Sin clave no hay reintento seguro: un ingreso sin ella se rechaza en vez
+    /// de guardarse "por esta vez", que es como se cuelan los lotes duplicados.
+    #[test]
+    fn validar_rechaza_la_clave_de_idempotencia_ausente_o_invalida() {
+        let payload = IngresoAddPayload {
+            clave_idempotencia: None,
+            ..add_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "falta el clave_idempotencia"
+        );
+
+        let payload = IngresoAddPayload {
+            clave_idempotencia: Some("reintento-1".into()),
+            ..add_payload()
+        };
+
+        assert_eq!(
+            payload.validar().unwrap_err().mensaje(),
+            "el clave_idempotencia no es un UUID válido"
         );
     }
 

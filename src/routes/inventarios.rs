@@ -38,6 +38,12 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::llaves_nfc::controller_quitar_llave(ctx).await
         }
+        "lotes_materias_primas" => {
+            if !ctx.permisos.contains("lotes_materias_primas:add") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::materias_primas::ingresos::ingreso_lote_materia_prima_add(ctx).await
+        }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }

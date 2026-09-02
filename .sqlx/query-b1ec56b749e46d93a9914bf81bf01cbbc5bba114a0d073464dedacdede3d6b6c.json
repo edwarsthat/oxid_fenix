@@ -1,0 +1,282 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, codigo, clave_idempotencia, predio_id, materia_prima_id,\n               placa, numero_remision, numero_tiquete_bascula,\n               fecha_ingreso, llegada_en, inicio_descargue_en, fin_descargue_en,\n               peso_ingreso::float8  AS \"peso_ingreso!\",\n               peso_devuelto::float8 AS \"peso_devuelto!\",\n               cerrado_en, observaciones, registrado_por,\n               anulado_en, anulado_por, motivo_anulacion,\n               version, creado_en, actualizado_en\n        FROM ingresos_materia_prima\n        WHERE clave_idempotencia = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "codigo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "clave_idempotencia",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "clave_idempotencia"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "predio_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "predio_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "materia_prima_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "materia_prima_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "placa",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "placa"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "numero_remision",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "numero_remision"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "numero_tiquete_bascula",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "numero_tiquete_bascula"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "fecha_ingreso",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "fecha_ingreso"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "llegada_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "llegada_en"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "inicio_descargue_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "inicio_descargue_en"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "fin_descargue_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "fin_descargue_en"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "peso_ingreso!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "peso_devuelto!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "cerrado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "cerrado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "observaciones",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "observaciones"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "registrado_por",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "registrado_por"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "anulado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "anulado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "anulado_por",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "anulado_por"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "motivo_anulacion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "motivo_anulacion"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "actualizado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "actualizado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      null,
+      null,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b1ec56b749e46d93a9914bf81bf01cbbc5bba114a0d073464dedacdede3d6b6c"
+}
