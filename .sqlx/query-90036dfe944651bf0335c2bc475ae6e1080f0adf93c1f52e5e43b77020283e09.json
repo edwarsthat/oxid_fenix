@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT codigo, anulado_en, cerrado_en\n        FROM ingresos_materia_prima\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "codigo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "anulado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "anulado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "cerrado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "cerrado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "90036dfe944651bf0335c2bc475ae6e1080f0adf93c1f52e5e43b77020283e09"
+}

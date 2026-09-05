@@ -60,6 +60,7 @@ pub async fn dispatch(raw: &str, state: &AppState) -> WsResponse {
         "inventarios" => crate::routes::inventarios::route(resto, ctx).await,
         "proveedores" => crate::routes::proveedores::route(resto, ctx).await,
         "catalogos" => crate::routes::catalogos::route(resto, ctx).await,
+        "proceso" => crate::routes::proceso::route(resto, ctx).await,
         _ => WsResponse::error(ctx.id, 404, "área desconocida"),
     }
 }

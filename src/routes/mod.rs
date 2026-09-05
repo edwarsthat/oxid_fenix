@@ -3,6 +3,7 @@ pub mod administracion;
 pub mod catalogos;
 pub mod dispatcher;
 pub mod inventarios;
+pub mod proceso;
 pub mod protocol;
 pub mod proveedores;
 pub mod sistema;

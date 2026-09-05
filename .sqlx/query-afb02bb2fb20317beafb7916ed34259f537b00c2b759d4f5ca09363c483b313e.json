@@ -1,0 +1,148 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, lote_id, linea, inicio_en, fin_en, programado_por,\n               cerrado_por, observaciones, version, creado_en, actualizado_en\n        FROM programaciones_proceso\n        WHERE linea = $1 AND fin_en IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "lote_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "lote_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "linea",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "linea"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "inicio_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "inicio_en"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "fin_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "fin_en"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "programado_por",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "programado_por"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "cerrado_por",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "cerrado_por"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "observaciones",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "observaciones"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "actualizado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "programaciones_proceso",
+            "name": "actualizado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int2"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "afb02bb2fb20317beafb7916ed34259f537b00c2b759d4f5ca09363c483b313e"
+}

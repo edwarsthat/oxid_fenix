@@ -31,6 +31,8 @@ const MODULOS: &[(&str, &[&str])] = &[
     ("predios", CRUD),
     //catalogos
     ("materias_primas", &["read"]),
+    //proceso
+    ("programaciones_proceso", &["add", "read", "update"]),
 ];
 
 /// Siembra el producto módulos × acciones. Idempotente.

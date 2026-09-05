@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE programaciones_proceso\n            SET fin_en = NOW(), cerrado_por = $2\n            WHERE id = $1 AND fin_en IS NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "baf270b16d4d6f087cfe912a3f054b21dc120973747b7e02e65241a243a50bdc"
+}

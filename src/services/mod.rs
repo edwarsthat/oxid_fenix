@@ -3,6 +3,7 @@ pub mod catalogos;
 pub mod error;
 pub mod inventarios;
 pub mod logs;
+pub mod proceso;
 pub mod proveedores;
 pub mod sistema;
 pub mod talento_humano;
