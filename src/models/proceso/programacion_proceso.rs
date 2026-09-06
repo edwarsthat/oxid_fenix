@@ -10,13 +10,8 @@ pub struct ProgramacionProceso {
     pub id: Uuid,
     pub lote_id: Uuid,
 
-    // SMALLINT en la tabla, que el driver decodifica como i16. Con i32 el
-    // SELECT no falla al compilar sino al leer la fila, ya en producción.
     pub linea: i16,
 
-    // El intervalo. `fin_en` en NULL —y con él `cerrado_por`— es el caso
-    // normal, no el raro: es la programación que está corriendo ahora, la que
-    // le da el lote a cada pesada.
     pub inicio_en: DateTime<Utc>,
     pub fin_en: Option<DateTime<Utc>>,
 

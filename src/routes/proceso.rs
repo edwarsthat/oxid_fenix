@@ -7,7 +7,7 @@ use crate::routes::protocol::{Ctx, WsResponse};
 /// resto: "programaciones_proceso:add"
 pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
     match resto {
-        "programaciones_proceso:add" => {
+        "programacion_proceso:add" => {
             if !ctx.permisos.contains("programaciones_proceso:add") {
                 return WsResponse::error(ctx.id, 403, "sin permiso");
             }
