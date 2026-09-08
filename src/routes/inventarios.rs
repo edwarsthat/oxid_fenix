@@ -47,13 +47,12 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             )
             .await
         }
-
-        //"lotes_materias_primas:add" => {
-        //   if !ctx.permisos.contains("lotes_materias_primas:add") {
-        //     return WsResponse::error(ctx.id, 403, "sin permiso");
-        //   }
-        //  controller::materias_primas::ingresos::ingreso_lote_materia_prima_add(ctx).await
-        // }
+        "inventario_materia_prima:add" => {
+            if !ctx.permisos.contains("inventario_materia_prima:add") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::materias_primas::ingresos::ingreso_lote_materia_prima_add(ctx).await
+        }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }

@@ -1,3 +1,4 @@
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
@@ -180,4 +181,43 @@ pub async fn add_programacion_proceso(
         programacion,
         creado: true,
     })
+}
+
+/// Lo que está montado en las líneas ahora mismo: las programaciones sin
+/// `fin_en`.
+///
+/// Devuelve una lista y no una sola fila aunque hoy el índice parcial
+/// `ux_programaciones_proceso_abierta` garantice una abierta por línea y la
+/// planta tenga una sola línea: el día que exista la segunda, la consulta
+/// devuelve dos filas y acá no cambia nada. Con `Option` habría que tocar la
+/// firma, el controlador y el cliente en ese mismo día.
+///
+/// Sale por `pool` y no por transacción porque es una lectura suelta: no
+/// comparte invariante con ninguna escritura, a diferencia del alta.
+pub async fn get_lotes_materia_prima_procesando(
+    pool: &PgPool,
+) -> Result<Vec<ProgramacionProceso>, ServiceError> {
+    // `fin_en IS NULL` es la condición del índice parcial, así que esto lee
+    // tantas filas como líneas abiertas haya por más que la tabla acumule toda
+    // la historia de montajes. Si alguien le agrega otra condición al WHERE, el
+    // índice deja de aplicar y la consulta pasa a recorrer la tabla entera sin
+    // que nada falle a la vista.
+    //
+    // El ORDER BY es por `linea` y no por `inicio_en`: la lista es "qué hay en
+    // cada línea", y con una fila por línea ese orden es estable entre
+    // consultas.
+    let programaciones = sqlx::query_as!(
+        ProgramacionProceso,
+        r#"
+        SELECT id, lote_id, linea, inicio_en, fin_en, programado_por,
+               cerrado_por, observaciones, version, creado_en, actualizado_en
+        FROM programaciones_proceso
+        WHERE fin_en IS NULL
+        ORDER BY linea
+        "#
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(programaciones)
 }

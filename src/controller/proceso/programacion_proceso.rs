@@ -2,7 +2,10 @@ use crate::{
     models::{proceso::programacion_proceso::ProgramacionProcesoAddPayload, validations::Validar},
     routes::protocol::{Ctx, WsResponse},
     services::{
-        logs::audit_logs::create_audit_log, proceso::programacion_proceso::add_programacion_proceso,
+        logs::audit_logs::create_audit_log,
+        proceso::programacion_proceso::{
+            add_programacion_proceso, get_lotes_materia_prima_procesando,
+        },
     },
 };
 
@@ -67,10 +70,12 @@ pub async fn programacion_proceso_add(ctx: Ctx) -> WsResponse {
     }
 
     // El evento tiene que llamarse igual que el permiso: `emit` arma el filtro
-    // como `{event}:read`, así que esto pide `programaciones_proceso:read`.
+    // como `{event}:read`, así que esto pide `programacion_proceso:read`. Es el
+    // nombre del módulo en la semilla de permisos, no el de la tabla — la tabla
+    // es plural y el permiso singular, y acá manda el permiso.
     if alta.creado {
         ctx.emit(
-            "programaciones_proceso",
+            "programacion_proceso",
             "add",
             serde_json::json!({ "data": alta.programacion }),
         );
@@ -84,4 +89,11 @@ pub async fn programacion_proceso_add(ctx: Ctx) -> WsResponse {
         ctx.id,
         serde_json::json!({ "data": alta.programacion, "creado": alta.creado }),
     )
+}
+
+pub async fn lotes_materia_prima_procesando_get(ctx: Ctx) -> WsResponse {
+    match get_lotes_materia_prima_procesando(&ctx.state.pool).await {
+        Ok(lotes) => WsResponse::ok(ctx.id, serde_json::json!({ "data": lotes })),
+        Err(err) => WsResponse::from_service_error(ctx.id, "lotes_materia_prima_procesando", err),
+    }
 }
