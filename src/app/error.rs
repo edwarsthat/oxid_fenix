@@ -22,6 +22,9 @@ pub enum ApiError {
 
     #[error("validacion: {0}")]
     Validacion(#[from] ValidacionError),
+
+    #[error("pesaje rechazado: {0}")]
+    PesajeRechazado(String),
 }
 
 impl IntoResponse for ApiError {
@@ -53,6 +56,7 @@ impl IntoResponse for ApiError {
                 "error interno".to_string(),
             ),
             ApiError::Validacion(err) => (StatusCode::BAD_REQUEST, err.mensaje().to_string()),
+            ApiError::PesajeRechazado(mensaje) => (StatusCode::UNPROCESSABLE_ENTITY, mensaje),
         };
 
         (status, mensaje).into_response()
@@ -150,5 +154,10 @@ mod tests {
         // validacion -> 400, y este sí propaga su mensaje
         let resp = ApiError::Validacion(ValidacionError::nuevo("email no valido")).into_response();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        // pesaje que no se pudo asignar -> 422, para que la Pi no lo reintente
+        let resp =
+            ApiError::PesajeRechazado("sin lote programado a esa hora".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 }

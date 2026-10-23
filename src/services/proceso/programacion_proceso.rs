@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -220,4 +221,48 @@ pub async fn get_lotes_materia_prima_procesando(
     .await?;
 
     Ok(programaciones)
+}
+
+/// La programación que estaba montada en `linea` a la hora `medido_en`, o None
+/// si a esa hora la línea no tenía nada.
+///
+/// No es lo mismo que `get_lotes_materia_prima_procesando`: aquella mira lo
+/// que corre ahora, esta lo que corría a esa hora. La diferencia importa con
+/// los pesajes de la báscula, que pueden llegar horas después por la cola del
+/// concentrador; para entonces la línea puede estar en otro lote.
+///
+/// El intervalo es cerrado al inicio y abierto al final. El alta cierra la
+/// anterior y abre la nueva en la misma transacción, así que las dos comparten
+/// el mismo `NOW()`: con `fin_en > medido_en` una pesada justo en ese instante
+/// cae en la nueva y no en las dos.
+pub async fn get_programacion_en<'e, E>(
+    executor: E,
+    linea: i16,
+    medido_en: DateTime<Utc>,
+) -> Result<Option<ProgramacionProceso>, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    // El ORDER BY y el LIMIT son por las dudas: el índice parcial solo impide
+    // dos abiertas a la vez, no que dos intervalos ya cerrados se pisen. Si
+    // pasara, gana la que se montó último, que es lo que la línea tenía puesto.
+    let programacion = sqlx::query_as!(
+        ProgramacionProceso,
+        r#"
+        SELECT id, lote_id, linea, inicio_en, fin_en, programado_por,
+               cerrado_por, observaciones, version, creado_en, actualizado_en
+        FROM programaciones_proceso
+        WHERE linea = $1
+          AND inicio_en <= $2
+          AND (fin_en IS NULL OR fin_en > $2)
+        ORDER BY inicio_en DESC
+        LIMIT 1
+        "#,
+        linea,
+        medido_en,
+    )
+    .fetch_optional(executor)
+    .await?;
+
+    Ok(programacion)
 }

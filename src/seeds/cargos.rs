@@ -22,6 +22,24 @@ pub async fn seed(pool: &PgPool) -> Result<(), SeedError> {
         println!("[seed::cargos] 'admin' creado")
     }
 
+    let res = sqlx::query(
+        r#"
+        INSERT INTO cargos (nombre, descripcion)
+        VALUES ($1, $2)
+        ON CONFLICT (nombre) DO NOTHING
+        "#,
+    )
+    .bind("sistema")
+    .bind("Cargo de los usuarios de sistema (procesos automáticos). Sin permisos.")
+    .execute(pool)
+    .await?;
+
+    if res.rows_affected() == 0 {
+        println!("[seed::cargos] 'sistema' ya existe")
+    } else {
+        println!("[seed::cargos] 'sistema' creado")
+    }
+
     Ok(())
 }
 

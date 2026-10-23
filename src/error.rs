@@ -1,10 +1,14 @@
 use crate::db::error::ConnectError;
+use crate::services::error::ServiceError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("database error: {0}")]
     Database(#[from] ConnectError),
+
+    #[error("{0}")]
+    Service(#[from] ServiceError),
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),

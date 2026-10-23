@@ -147,6 +147,7 @@ mod tests {
             pool,
             sessions: SessionStore::new(),
             eventos: broadcast::Sender::new(100),
+            usuario_basculas_id: Uuid::nil(),
         }
     }
 

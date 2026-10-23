@@ -1,0 +1,119 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT i.id AS lote_id,\n               i.codigo,\n               i.materia_prima_id,\n               mp.nombre AS materia_prima,\n               p.nombre  AS predio,\n               pr.nombre AS proveedor,\n               i.llegada_en,\n               i.peso_ingreso::float8              AS \"peso_ingreso!\",\n               (-m.efecto)::float8                 AS \"consumido!\",\n               (i.peso_ingreso + m.efecto)::float8 AS \"saldo!\"\n        FROM ingresos_materia_prima i\n        JOIN materias_primas mp ON mp.id = i.materia_prima_id\n        JOIN predios p          ON p.id  = i.predio_id\n        -- El proveedor cuelga del predio y no del lote: `predios.proveedor_id`\n        -- es NOT NULL, así que el JOIN interno no puede perder filas.\n        JOIN proveedores pr     ON pr.id = p.proveedor_id\n        -- CROSS y no LEFT: el subquery es un agregado, así que siempre devuelve\n        -- exactamente una fila. Un lote sin movimientos da 0 por el COALESCE, no\n        -- NULL, y por eso el saldo de un lote recién ingresado es su peso de\n        -- ingreso completo en vez de NULL.\n        --\n        -- LATERAL y no un GROUP BY sobre todo el SELECT: así cada lote resuelve\n        -- su suma contra `idx_movimientos_mp_lote`, que trae `peso_efecto` en el\n        -- INCLUDE y no tiene que tocar la tabla de movimientos.\n        CROSS JOIN LATERAL (\n            SELECT COALESCE(SUM(mv.peso_efecto), 0) AS efecto\n            FROM movimientos_materia_prima mv\n            WHERE mv.lote_id = i.id\n        ) m\n        -- `cerrado_en` es un atajo, no la verdad: el saldo real es la resta de\n        -- abajo. Se filtra por la marca igual, porque es lo que permite no\n        -- calcularle el saldo a todos los lotes de la historia solo para\n        -- descartarlos. Si algún día la marca y la resta no coinciden, un lote\n        -- cerrado con saldo no sale acá — manda la resta, pero eso se arregla\n        -- revisando el cierre, no ensanchando esta consulta.\n        WHERE i.cerrado_en IS NULL\n          AND i.anulado_en IS NULL\n        -- FEFO: primero el que lleva más tiempo esperando, que con\n        -- `horas_maximas_espera` de por medio es el urgente. El orden lo pone el\n        -- servidor y no el cliente porque es la regla del negocio, no una\n        -- preferencia de la pantalla.\n        --\n        -- `i.id` desempata: dos lotes pueden compartir `llegada_en` si el\n        -- cliente la mandó a mano, y sin desempate el orden entre esos dos\n        -- cambiaría entre consultas.\n        ORDER BY i.llegada_en, i.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "lote_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "codigo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "materia_prima_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "materia_prima_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "materia_prima",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "materias_primas",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "predio",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "predios",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "proveedor",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "proveedores",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "llegada_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ingresos_materia_prima",
+            "name": "llegada_en"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "peso_ingreso!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "consumido!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "saldo!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "3187ebecb02eded247a745b41d2298f2bcc9320bb6690d23b0c3deb8c7c67b9f"
+}

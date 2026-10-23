@@ -1,5 +1,6 @@
 pub mod administracion;
 pub mod catalogos;
+pub mod dispositivos;
 pub mod error;
 pub mod inventarios;
 pub mod logs;

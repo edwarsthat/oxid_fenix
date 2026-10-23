@@ -1,0 +1,160 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, codigo, nombre, ubicacion, descripcion, llave_hash,\n               llave_prefijo, llave_emitida_en, estado, version,\n               creado_en, actualizado_en\n        FROM concentradores\n        WHERE llave_hash = $1 AND estado = 'activo'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "codigo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "codigo"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "nombre",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "nombre"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "ubicacion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "ubicacion"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "descripcion",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "descripcion"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "llave_hash",
+        "type_info": "Bpchar",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "llave_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "llave_prefijo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "llave_prefijo"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "llave_emitida_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "llave_emitida_en"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "estado",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "estado"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "actualizado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "concentradores",
+            "name": "actualizado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bpchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d27e344201712d7dc63ca21aae8050e5cd63c72b331e6b27fc1256c1b8f616f6"
+}

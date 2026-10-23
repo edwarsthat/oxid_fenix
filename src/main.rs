@@ -5,6 +5,7 @@ use oxid_fenix::{
     app::app::{AppState, build_router},
     db::postgres::connect,
     error::AppError,
+    services::sistema::auth::get_id_usuario_basculas,
     sessions::memory::SessionStore,
 };
 use tokio::sync::broadcast;
@@ -24,6 +25,7 @@ async fn run() -> Result<(), AppError> {
     tracing_subscriber::fmt::init();
     dotenvy::dotenv().ok();
     let pool = connect().await?;
+    let usuario_basculas_id = get_id_usuario_basculas(&pool).await?;
     let sessions = SessionStore::new();
     sessions.iniciar_limpieza(Duration::from_secs(300));
     let (eventos_tx, _) = broadcast::channel(100);
@@ -31,6 +33,7 @@ async fn run() -> Result<(), AppError> {
         pool,
         sessions,
         eventos: eventos_tx,
+        usuario_basculas_id,
     };
     let app = build_router(state);
 

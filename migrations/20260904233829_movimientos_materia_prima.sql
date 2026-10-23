@@ -130,9 +130,42 @@ CREATE TABLE movimientos_materia_prima (
     -- La FK apunta a esta misma tabla: Postgres lo permite dentro del CREATE.
     corrige_movimiento_id UUID REFERENCES movimientos_materia_prima(id) ON DELETE RESTRICT,
 
+    -- === Origen de báscula ===
+    -- De qué báscula, por cuál concentrador y a qué hora real se pesó cada
+    -- consumo de la línea. Los pesajes llegan por POST desde el concentrador
+    -- (Raspberry Pi), que los encola si no hay red. Solo entran acá los que se
+    -- pudieron asignar (lote programado en la línea de la báscula a esa hora,
+    -- y operario dueño de la llave a esa hora); los demás se responden 422 y
+    -- la Pi los manda por su cola de rechazados.
+
+    -- Hora del reloj del ESP32 al pesar. Es la que decide el lote y el
+    -- operario, y la que deben usar los reportes por turno o por día.
+    medido_en TIMESTAMPTZ,
+
+    -- Cuándo lo recibió la Pi. Junto con `medido_en` y `creado_en` deja ver
+    -- las tres horas cuando algo no cuadra (reloj desfasado, cola atascada).
+    recibido_concentrador_en TIMESTAMPTZ,
+
+    -- Por cuál Pi llegó. Sale de la llave con la que se autenticó la
+    -- petición, nunca del cuerpo.
+    concentrador_id UUID REFERENCES concentradores(id) ON DELETE RESTRICT,
+
+    bascula_id UUID REFERENCES basculas(id) ON DELETE RESTRICT,
+
+    -- Identidad del evento en el ESP32, para cruzar con sus logs.
+    sesion_arranque BIGINT,
+    transaccion BIGINT,
+
+    -- Lo que leyó el lector. `operario_id` es lo que el servidor resolvió con
+    -- esto; se guardan los dos porque si después se discute quién pesó, la
+    -- pregunta es qué tarjeta se pasó, no a quién se le atribuyó.
+    uid_tarjeta VARCHAR(32),
+
     version INTEGER NOT NULL DEFAULT 1,
-    -- `creado_en` es también la hora del movimiento: no hay un registrado_en
-    -- aparte porque la pesada se registra cuando ocurre.
+    -- Cuándo llegó el movimiento al servidor. En los movimientos manuales es
+    -- también la hora del movimiento; en los pesajes de báscula NO: con la
+    -- cola de la Pi un pesaje puede llegar horas después, y la hora real es
+    -- `medido_en`.
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -173,7 +206,19 @@ CREATE TABLE movimientos_materia_prima (
     -- significa nada y sería un dato que después hay que aprender a ignorar.
     CONSTRAINT movimientos_materia_prima_correccion_check
         CHECK (corrige_movimiento_id IS NULL
-               OR tipo IN ('ajuste_entrada', 'ajuste_salida'))
+               OR tipo IN ('ajuste_entrada', 'ajuste_salida')),
+
+    -- Un pesaje de báscula trae todo su origen o nada: medio origen es una
+    -- fila que dice venir de una báscula y no deja verificarlo.
+    CONSTRAINT movimientos_materia_prima_origen_bascula_completo_check
+        CHECK (num_nonnulls(medido_en, recibido_concentrador_en, concentrador_id,
+                            bascula_id, sesion_arranque, transaccion, uid_tarjeta)
+               IN (0, 7)),
+
+    -- Solo un consumo sale de la báscula: un ajuste o una merma con origen de
+    -- báscula sería un movimiento manual disfrazado de pesada.
+    CONSTRAINT movimientos_materia_prima_origen_bascula_tipo_check
+        CHECK (bascula_id IS NULL OR tipo = 'consumo')
 );
 
 -- El índice del saldo, que es la consulta caliente: SUM(peso_efecto) de un
@@ -205,6 +250,18 @@ CREATE INDEX idx_movimientos_mp_operario
 CREATE INDEX idx_movimientos_mp_correccion
     ON movimientos_materia_prima (corrige_movimiento_id)
     WHERE corrige_movimiento_id IS NOT NULL;
+
+-- Segunda red contra duplicados, además de `clave_idempotencia`: si se pierde
+-- la base de la Pi y reenvía los pesajes con UUID nuevos, la terna del ESP32
+-- sigue siendo la misma. Parcial porque los movimientos manuales no la tienen.
+CREATE UNIQUE INDEX ux_movimientos_mp_evento_bascula
+    ON movimientos_materia_prima (bascula_id, sesion_arranque, transaccion)
+    WHERE bascula_id IS NOT NULL;
+
+-- Los reportes de la línea por hora real de pesaje.
+CREATE INDEX idx_movimientos_mp_medido
+    ON movimientos_materia_prima (medido_en DESC)
+    WHERE medido_en IS NOT NULL;
 
 CREATE TRIGGER trg_movimientos_materia_prima_actualizado_en
 BEFORE UPDATE ON movimientos_materia_prima

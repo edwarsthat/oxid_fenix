@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -411,4 +412,49 @@ pub async fn quitar_asignacion_llave(
         }
         Err(err) => Err(map_conflicto_asignacion(err)),
     }
+}
+
+/// El empleado que tenía la llave `uid` a la hora `medido_en`, o None si a esa
+/// hora no estaba asignada a nadie (o el uid no existe).
+///
+/// Mira el historial y no la asignación vigente porque los pesajes pueden
+/// llegar horas después por la cola del concentrador: para entonces la llave
+/// pudo cambiar de manos. Por lo mismo no filtra por `estado`: una llave que
+/// hoy figura perdida pudo estar asignada a esa hora.
+///
+/// El `uid` tiene que llegar normalizado con `uid_nfc`, igual que en el resto
+/// de las consultas por uid: la búsqueda es por igualdad exacta.
+///
+/// El intervalo es cerrado al inicio y abierto al final, igual que en
+/// `get_programacion_en`: si la llave se devuelve y se reasigna en el mismo
+/// instante, el pesaje cae en la asignación nueva y no en las dos.
+pub async fn get_empleado_con_llave_en<'e, E>(
+    executor: E,
+    uid: &str,
+    medido_en: DateTime<Utc>,
+) -> Result<Option<Uuid>, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    // El ORDER BY y el LIMIT son por las dudas: los índices parciales solo
+    // impiden dos asignaciones activas a la vez, no que dos ya cerradas se
+    // pisen. Si pasara, gana la más reciente.
+    let empleado_id = sqlx::query_scalar!(
+        r#"
+        SELECT a.empleado_id
+        FROM llaves_nfc ln
+        JOIN asignaciones_llave a ON a.llave_id = ln.id
+        WHERE ln.uid = $1
+          AND a.asignada_en <= $2
+          AND (a.devuelta_en IS NULL OR a.devuelta_en > $2)
+        ORDER BY a.asignada_en DESC
+        LIMIT 1
+        "#,
+        uid,
+        medido_en,
+    )
+    .fetch_optional(executor)
+    .await?;
+
+    Ok(empleado_id)
 }

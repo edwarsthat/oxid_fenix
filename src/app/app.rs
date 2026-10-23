@@ -16,11 +16,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{
-    app::error::WsError,
-    controller::sistema::auth::{change_password, login},
-    routes::protocol::Evento,
-    security::rate_limit::{RateLimiter, limitar},
-    sessions::memory::{Session, SessionStore},
+    app::error::WsError, controller::{inventarios::materias_primas::movimientos_materia_prima::ingreso_movimiento_materia_prima, sistema::auth::{change_password, login}}, routes::protocol::Evento, security::{concentrador::autenticar_concentrador, rate_limit::{RateLimiter, limitar}}, sessions::memory::{Session, SessionStore},
 };
 
 #[derive(Clone)]
@@ -28,6 +24,7 @@ pub struct AppState {
     pub pool: PgPool,
     pub sessions: SessionStore,
     pub eventos: broadcast::Sender<Arc<Evento>>,
+    pub usuario_basculas_id: Uuid,
 }
 
 /// Límite por IP de cada endpoint, en (pico de golpe, ritmo sostenido por minuto).
@@ -46,6 +43,7 @@ mod limites {
     /// hashea el nuevo), de ahí que no sea más permisivo que el login.
     pub const LOGIN: (u32, u32) = (5, 5);
     pub const CAMBIAR_PASSWORD: (u32, u32) = (5, 5);
+    pub const PESAJES: (u32, u32) = (120, 120);
 
     /// Esto limita el handshake del websocket, no los mensajes de un socket ya
     /// abierto. Deja margen para reconexiones cuando se cae la red, pero corta
@@ -74,6 +72,11 @@ pub fn build_router(state: AppState) -> Router {
         // OJO: el orden importa. `.layer()` sobre el `MethodRouter` deja el
         // límite por delante del handler, así que un login de más se corta
         // antes de tocar la base de datos y antes de pagar el argon2.
+        .route("/pesaje", post(ingreso_movimiento_materia_prima)
+            .layer(middleware::from_fn_with_state(state.clone(), autenticar_concentrador))
+            .layer(rate_limit!(limites::PESAJES)),
+        )
+
         .with_state(state)
 }
 

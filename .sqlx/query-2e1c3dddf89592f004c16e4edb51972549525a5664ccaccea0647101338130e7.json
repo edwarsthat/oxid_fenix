@@ -1,0 +1,282 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO movimientos_materia_prima\n            (clave_idempotencia, lote_id, programacion_id, tipo, peso,\n             operario_id, registrado_por,\n             medido_en, recibido_concentrador_en, concentrador_id, bascula_id,\n             sesion_arranque, transaccion, uid_tarjeta)\n        VALUES ($1, $2, $3, 'consumo', $4::float8::numeric,\n                $5, $6,\n                $7, $8, $9, $10,\n                $11, $12, $13)\n        ON CONFLICT DO NOTHING\n        RETURNING id, clave_idempotencia, lote_id, programacion_id, tipo,\n                  peso::float8        AS \"peso!\",\n                  peso_efecto::float8 AS \"peso_efecto!\",\n                  operario_id, registrado_por, motivo, observaciones,\n                  corrige_movimiento_id,\n                  medido_en, recibido_concentrador_en, concentrador_id, bascula_id,\n                  sesion_arranque, transaccion, uid_tarjeta,\n                  version, creado_en, actualizado_en\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "clave_idempotencia",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "clave_idempotencia"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "lote_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "lote_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "programacion_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "programacion_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tipo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "tipo"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "peso!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "peso_efecto!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "operario_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "operario_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "registrado_por",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "registrado_por"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "motivo",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "motivo"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "observaciones",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "observaciones"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "corrige_movimiento_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "corrige_movimiento_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "medido_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "medido_en"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "recibido_concentrador_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "recibido_concentrador_en"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "concentrador_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "concentrador_id"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "bascula_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "bascula_id"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "sesion_arranque",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "sesion_arranque"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "transaccion",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "transaccion"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "uid_tarjeta",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "uid_tarjeta"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "creado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "creado_en"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "actualizado_en",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "movimientos_materia_prima",
+            "name": "actualizado_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Uuid",
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      null,
+      null,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2e1c3dddf89592f004c16e4edb51972549525a5664ccaccea0647101338130e7"
+}

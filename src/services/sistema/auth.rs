@@ -25,6 +25,27 @@ pub async fn get_usuario_username(
     Ok(usuario)
 }
 
+/// Usuario de sistema con el que se registran los pesajes de las básculas.
+/// Lo crea el seed de usuarios.
+pub const USUARIO_BASCULAS: &str = "sistema.basculas";
+
+/// Id del usuario de sistema de las básculas. Se llama una vez al arrancar.
+///
+/// Sin `activo = true`, al revés que `get_usuario_username`: este usuario está
+/// inactivo a propósito para que nadie pueda iniciar sesión con él.
+pub async fn get_id_usuario_basculas(pool: &PgPool) -> Result<Uuid, ServiceError> {
+    let id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM usuarios WHERE usuario = $1")
+        .bind(USUARIO_BASCULAS)
+        .fetch_optional(pool)
+        .await?;
+
+    id.ok_or_else(|| {
+        ServiceError::NotFound(format!(
+            "no existe el usuario '{USUARIO_BASCULAS}'; corra los seeds"
+        ))
+    })
+}
+
 pub async fn get_permisos_por_cargo(
     pool: &PgPool,
     cargo_id: Uuid,
