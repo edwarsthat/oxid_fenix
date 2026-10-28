@@ -132,9 +132,9 @@ impl Validar for PesajeBasculaPayload {
         // Sin hora de medición no se puede decidir ni el lote ni el operario.
         // Es 400 y no 422: el pesaje está mal formado, no es que no se haya
         // podido asignar, y la Pi lo aparta en vez de reintentarlo.
-        let medido_en = self.hora_medicion.ok_or_else(|| {
-            ValidacionError::nuevo("el pesaje no trae hora_medicion")
-        })?;
+        let medido_en = self
+            .hora_medicion
+            .ok_or_else(|| ValidacionError::nuevo("el pesaje no trae hora_medicion"))?;
 
         Ok(PesajeBascula {
             clave_idempotencia: self.id,
@@ -196,7 +196,10 @@ mod tests {
     #[test]
     fn validar_rechaza_pesos_no_positivos() {
         for peso_kg in [0.0, -1.0, f64::NAN] {
-            let entrada = PesajeBasculaPayload { peso_kg, ..payload() };
+            let entrada = PesajeBasculaPayload {
+                peso_kg,
+                ..payload()
+            };
             assert!(entrada.validar().is_err(), "{peso_kg} debió fallar");
         }
     }

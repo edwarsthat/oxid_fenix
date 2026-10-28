@@ -55,6 +55,36 @@ fn map_conflicto_movimiento(err: sqlx::Error) -> ServiceError {
     ServiceError::from(err)
 }
 
+/// Si ya hay un movimiento con esa `clave_idempotencia` (el `id` de la Pi).
+///
+/// El endpoint de pesajes la mira antes de resolver báscula, lote y operario:
+/// un reintento no tiene que depender de que eso se siga resolviendo igual
+/// (una báscula desactivada después del primer envío lo haría salir 422 y la
+/// Pi lo daría por rechazado estando guardado). No reemplaza al `ON CONFLICT`
+/// de `add_consumo_bascula`: ese sigue atrapando la terna del ESP32 y dos
+/// envíos simultáneos que pasen los dos por acá antes de insertar.
+pub async fn existe_clave_idempotencia<'e, E>(
+    executor: E,
+    clave: Uuid,
+) -> Result<bool, ServiceError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let existe = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM movimientos_materia_prima
+            WHERE clave_idempotencia = $1
+        ) AS "existe!"
+        "#,
+        clave,
+    )
+    .fetch_one(executor)
+    .await?;
+
+    Ok(existe)
+}
+
 /// Alta de un consumo que llegó desde una báscula.
 ///
 /// `registrado_por` va aparte de `datos` por la misma razón que en las demás
