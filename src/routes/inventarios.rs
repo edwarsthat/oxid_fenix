@@ -53,6 +53,15 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::materias_primas::ingresos::ingreso_lote_materia_prima_add(ctx).await
         }
+        // Sin permiso propio a propósito: los pesajes son las salidas del
+        // mismo inventario, y el evento en vivo de cada pesaje ya viaja con
+        // `inventario_materia_prima:read`. Quien ve uno ve el otro.
+        "pesajes_bascula:read" => {
+            if !ctx.permisos.contains("inventario_materia_prima:read") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::materias_primas::movimientos_materia_prima::pesajes_bascula_read(ctx).await
+        }
         _ => WsResponse::error(ctx.id, 404, "Acción desconocida"),
     }
 }

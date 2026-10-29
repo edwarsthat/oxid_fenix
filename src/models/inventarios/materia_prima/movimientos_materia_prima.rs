@@ -1,10 +1,16 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::models::inventarios::llaves_nfc::uid_nfc;
-use crate::models::validations::{ValidacionError, Validar, peso_positivo};
+use crate::models::validations::{Rango, ValidacionError, Validar, limitar, peso_positivo};
+
+/// Ventana máxima del listado de pesajes. Un mes es lo más largo que pide la
+/// liquidación del destajo; más que eso es un reporte, no una pantalla, y sin
+/// tope un rango de un año obliga a Postgres a recorrer y sumar todo para los
+/// totales.
+const DIAS_MAXIMOS_PESAJES: i64 = 31;
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct MovimientosMateriaPrima {
@@ -149,9 +155,162 @@ impl Validar for PesajeBasculaPayload {
     }
 }
 
+/// Posición en el listado de pesajes: el (medido_en, id) de la última fila
+/// que recibió el cliente. El `id` desempata dos pesajes del mismo instante,
+/// que con varias básculas en la línea pasa.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub struct CursorPesaje {
+    pub medido_en: DateTime<Utc>,
+    pub id: Uuid,
+}
+
+/// Lo que manda el cliente.
+#[derive(Debug, Deserialize)]
+pub struct PesajesReadPayload {
+    /// Obligatorio con las dos puntas. Son instantes UTC que el front ya
+    /// calculó para el día local de Colombia: el servidor no hace `::date`,
+    /// porque eso cortaría el día en la medianoche UTC (las 7 p. m. de acá).
+    pub medido_en: Option<Rango<DateTime<Utc>>>,
+    pub operario_id: Option<Uuid>,
+    pub llave_id: Option<Uuid>,
+    pub lote_id: Option<Uuid>,
+    pub programacion_id: Option<Uuid>,
+    pub bascula_id: Option<Uuid>,
+    pub uid: Option<String>,
+    pub corregido: Option<bool>,
+    pub limite: Option<i64>,
+    pub cursor: Option<CursorPesaje>,
+}
+
+/// Lo que devuelve validar() y consume el servicio.
+///
+/// El rango va como dos campos sueltos y no como `RangoValidado`: acá las dos
+/// puntas son obligatorias, y así el servicio no tiene que desenvolver
+/// Options que validar() ya garantizó.
+#[derive(Debug)]
+pub struct PesajesFiltros {
+    /// Inclusivo.
+    pub desde: DateTime<Utc>,
+    /// Exclusivo: `medido_en < hasta`, para que el día siguiente arranque
+    /// justo donde termina este sin contar dos veces el pesaje de la frontera.
+    pub hasta: DateTime<Utc>,
+    pub operario_id: Option<Uuid>,
+    pub llave_id: Option<Uuid>,
+    pub lote_id: Option<Uuid>,
+    pub programacion_id: Option<Uuid>,
+    pub bascula_id: Option<Uuid>,
+    pub uid: Option<String>,
+    pub corregido: Option<bool>,
+    pub limite: i64,
+    pub cursor: Option<CursorPesaje>,
+}
+
+/// Una fila del listado de pesajes: el movimiento más lo que hace falta para
+/// leerlo sin ir a buscar a otras pantallas (quién, con qué llave, en qué
+/// báscula, de qué lote).
+#[derive(Debug, FromRow, Serialize)]
+pub struct PesajeListado {
+    pub id: Uuid,
+    pub lote_id: Uuid,
+    pub programacion_id: Uuid,
+    pub operario_id: Uuid,
+    pub bascula_id: Uuid,
+    pub peso: f64,
+    pub medido_en: DateTime<Utc>,
+    pub recibido_concentrador_en: DateTime<Utc>,
+    pub creado_en: DateTime<Utc>,
+    pub sesion_arranque: i64,
+    pub transaccion: i64,
+    pub uid_tarjeta: String,
+
+    pub operario_codigo: String,
+    pub operario_nombre: String,
+    pub operario_apellido: String,
+
+    /// La llave registrada con ese uid. `None` si la tarjeta ya no está en
+    /// `llaves_nfc` o se leyó con otro formato: no hay FK entre las dos.
+    pub llave_codigo: Option<String>,
+
+    pub bascula_codigo: String,
+    pub lote_codigo: String,
+    pub materia_prima_nombre: String,
+
+    /// Si algún ajuste apunta a este pesaje con `corrige_movimiento_id`.
+    pub corregido: bool,
+}
+
+/// Una página del listado. `siguiente_cursor` en `None` es la última página.
+#[derive(Debug, Serialize)]
+pub struct PaginaPesajes {
+    pub pesajes: Vec<PesajeListado>,
+    pub siguiente_cursor: Option<CursorPesaje>,
+}
+
+/// Totales por operario sobre todo el filtro, no sobre una página.
+#[derive(Debug, FromRow, Serialize)]
+pub struct TotalPesajesOperario {
+    pub operario_id: Uuid,
+    pub operario_codigo: String,
+    pub operario_nombre: String,
+    pub operario_apellido: String,
+    pub cantidad: i64,
+    /// Brutos: no restan los ajustes que corrigen estos pesajes.
+    pub kg: f64,
+    pub cantidad_corregidos: i64,
+}
+
+impl Validar for PesajesReadPayload {
+    type Datos = PesajesFiltros;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        // Sin rango el listado recorrería la tabla entera, y los totales del
+        // destajo sin fechas no significan nada: por eso no hay default.
+        let rango = self
+            .medido_en
+            .ok_or_else(|| ValidacionError::nuevo("falta el rango de medido_en"))?
+            .validar()?;
+
+        let (Some(desde), Some(hasta)) = (rango.desde(), rango.hasta()) else {
+            return Err(ValidacionError::nuevo(
+                "el rango de medido_en necesita desde y hasta",
+            ));
+        };
+
+        if hasta - desde > Duration::days(DIAS_MAXIMOS_PESAJES) {
+            return Err(ValidacionError::nuevo(format!(
+                "el rango de medido_en no puede pasar de {DIAS_MAXIMOS_PESAJES} días"
+            )));
+        }
+
+        // Igualdad exacta contra `uid_tarjeta`, que se guardó normalizado con
+        // `uid_nfc`: sin normalizar acá, "04:a1:b2:c3" no encontraría nada.
+        let uid = match self.uid.as_deref().map(str::trim) {
+            None | Some("") => None,
+            Some(valor) => Some(uid_nfc(valor)?),
+        };
+
+        let limite = limitar(self.limite);
+
+        Ok(PesajesFiltros {
+            desde,
+            hasta,
+            operario_id: self.operario_id,
+            llave_id: self.llave_id,
+            lote_id: self.lote_id,
+            programacion_id: self.programacion_id,
+            bascula_id: self.bascula_id,
+            uid,
+            corregido: self.corregido,
+            limite,
+            cursor: self.cursor,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::validations::LIMITE_POR_DEFECTO;
 
     fn payload() -> PesajeBasculaPayload {
         let hora: DateTime<Utc> = "2026-10-20T14:03:11Z".parse().unwrap();
@@ -212,5 +371,136 @@ mod tests {
         };
 
         assert!(entrada.validar().is_err());
+    }
+
+    fn hora(texto: &str) -> DateTime<Utc> {
+        texto.parse().unwrap()
+    }
+
+    /// Un día local de Colombia (UTC-5) expresado en UTC, como lo manda el
+    /// front.
+    fn read_payload() -> PesajesReadPayload {
+        PesajesReadPayload {
+            medido_en: Some(Rango {
+                desde: Some(hora("2026-10-20T05:00:00Z")),
+                hasta: Some(hora("2026-10-21T05:00:00Z")),
+            }),
+            operario_id: None,
+            llave_id: None,
+            lote_id: None,
+            programacion_id: None,
+            bascula_id: None,
+            uid: None,
+            corregido: None,
+            limite: None,
+            cursor: None,
+        }
+    }
+
+    #[test]
+    fn validar_pesajes_devuelve_el_rango_y_el_limite_por_defecto() {
+        let filtros = read_payload().validar().expect("deberia ser valido");
+
+        assert_eq!(filtros.desde, hora("2026-10-20T05:00:00Z"));
+        assert_eq!(filtros.hasta, hora("2026-10-21T05:00:00Z"));
+        assert_eq!(filtros.limite, LIMITE_POR_DEFECTO);
+        assert_eq!(filtros.uid, None);
+    }
+
+    #[test]
+    fn validar_pesajes_rechaza_el_rango_faltante() {
+        let sin_rango = PesajesReadPayload {
+            medido_en: None,
+            ..read_payload()
+        };
+        assert!(sin_rango.validar().is_err());
+
+        let sin_hasta = PesajesReadPayload {
+            medido_en: Some(Rango {
+                desde: Some(hora("2026-10-20T05:00:00Z")),
+                hasta: None,
+            }),
+            ..read_payload()
+        };
+        assert!(sin_hasta.validar().is_err());
+
+        let sin_desde = PesajesReadPayload {
+            medido_en: Some(Rango {
+                desde: None,
+                hasta: Some(hora("2026-10-21T05:00:00Z")),
+            }),
+            ..read_payload()
+        };
+        assert!(sin_desde.validar().is_err());
+    }
+
+    #[test]
+    fn validar_pesajes_rechaza_desde_posterior_a_hasta() {
+        let payload = PesajesReadPayload {
+            medido_en: Some(Rango {
+                desde: Some(hora("2026-10-21T05:00:00Z")),
+                hasta: Some(hora("2026-10-20T05:00:00Z")),
+            }),
+            ..read_payload()
+        };
+
+        assert!(payload.validar().is_err());
+    }
+
+    /// 31 días justos pasan; un segundo más ya no.
+    #[test]
+    fn validar_pesajes_limita_la_ventana_a_31_dias() {
+        let justo = PesajesReadPayload {
+            medido_en: Some(Rango {
+                desde: Some(hora("2026-10-01T05:00:00Z")),
+                hasta: Some(hora("2026-11-01T05:00:00Z")),
+            }),
+            ..read_payload()
+        };
+        assert!(justo.validar().is_ok());
+
+        let pasado = PesajesReadPayload {
+            medido_en: Some(Rango {
+                desde: Some(hora("2026-10-01T05:00:00Z")),
+                hasta: Some(hora("2026-11-01T05:00:01Z")),
+            }),
+            ..read_payload()
+        };
+        assert!(pasado.validar().is_err());
+    }
+
+    #[test]
+    fn validar_pesajes_normaliza_el_uid() {
+        let payload = PesajesReadPayload {
+            uid: Some(" 04:a1:b2:c3 ".into()),
+            ..read_payload()
+        };
+
+        let filtros = payload.validar().expect("deberia ser valido");
+
+        assert_eq!(filtros.uid.as_deref(), Some("04A1B2C3"));
+    }
+
+    /// Un uid en blanco es "sin filtro", no un error.
+    #[test]
+    fn validar_pesajes_uid_en_blanco_queda_en_none() {
+        let payload = PesajesReadPayload {
+            uid: Some("   ".into()),
+            ..read_payload()
+        };
+
+        let filtros = payload.validar().expect("deberia ser valido");
+
+        assert_eq!(filtros.uid, None);
+    }
+
+    #[test]
+    fn validar_pesajes_rechaza_uid_invalido() {
+        let payload = PesajesReadPayload {
+            uid: Some("ZZZZ".into()),
+            ..read_payload()
+        };
+
+        assert!(payload.validar().is_err());
     }
 }

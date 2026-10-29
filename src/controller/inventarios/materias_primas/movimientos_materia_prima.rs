@@ -6,12 +6,12 @@ use crate::{
     app::{app::AppState, error::ApiError}, models::{
         dispositivos::concentradores::Concentrador,
         inventarios::materia_prima::movimientos_materia_prima::{
-            ConsumoBasculaNuevo, PesajeBasculaPayload,
+            ConsumoBasculaNuevo, PesajeBasculaPayload, PesajesReadPayload,
         },
         validations::Validar,
-    }, routes::protocol::{Evento, WsEvent}, services::{
+    }, routes::protocol::{Ctx, Evento, WsEvent, WsResponse}, services::{
         dispositivos::basculas::bascula_por_device_id, error::ServiceError, inventarios::{
-            llaves_nfc::get_empleado_con_llave_en, materias_primas::movimientos_materia_prima::{add_consumo_bascula, existe_clave_idempotencia},
+            llaves_nfc::get_empleado_con_llave_en, materias_primas::movimientos_materia_prima::{add_consumo_bascula, existe_clave_idempotencia, get_pesajes_bascula, get_totales_pesajes_bascula},
         }, logs::audit_logs::create_audit_log, proceso::programacion_proceso::get_programacion_en,
     },
 };
@@ -160,4 +160,50 @@ pub async fn ingreso_movimiento_materia_prima(
     }
 
     Ok(StatusCode::CREATED)
+}
+
+/// Listado de pesajes de báscula para la pantalla del destajo: una página del
+/// listado y los totales por operario del mismo filtro.
+///
+/// Los totales solo se calculan en la primera página (sin `cursor`): no
+/// dependen de la página, y repetir el GROUP BY de hasta 31 días cada vez que
+/// el usuario baja el scroll es trabajo tirado. En las páginas siguientes van
+/// en `null` y el front se queda con los que ya tiene; para refrescarlos pide
+/// de nuevo la primera página.
+pub async fn pesajes_bascula_read(ctx: Ctx) -> WsResponse {
+    let payload: PesajesReadPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
+
+    let filtros = match payload.validar() {
+        Ok(filtros) => filtros,
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
+    };
+
+    let totales = if filtros.cursor.is_none() {
+        match get_totales_pesajes_bascula(&ctx.state.pool, &filtros).await {
+            Ok(totales) => Some(totales),
+            Err(err) => {
+                return WsResponse::from_service_error(ctx.id, "pesajes_bascula_read", err);
+            }
+        }
+    } else {
+        None
+    };
+
+    match get_pesajes_bascula(&ctx.state.pool, filtros).await {
+        Ok(pagina) => WsResponse::ok(
+            ctx.id,
+            serde_json::json!({
+                "data": {
+                    "pesajes": pagina.pesajes,
+                    "siguiente_cursor": pagina.siguiente_cursor,
+                    "totales": totales,
+                }
+            }),
+        ),
+        Err(err) => WsResponse::from_service_error(ctx.id, "pesajes_bascula_read", err),
+    }
 }

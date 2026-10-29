@@ -1,8 +1,10 @@
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
     models::inventarios::materia_prima::movimientos_materia_prima::{
-        AltaMovimiento, ConsumoBasculaNuevo, MovimientosMateriaPrima,
+        AltaMovimiento, ConsumoBasculaNuevo, CursorPesaje, MovimientosMateriaPrima,
+        PaginaPesajes, PesajeListado, PesajesFiltros, TotalPesajesOperario,
     },
     services::error::ServiceError,
 };
@@ -186,4 +188,198 @@ pub async fn add_consumo_bascula(
         movimiento: existente,
         creado: false,
     })
+}
+
+/// Listado de pesajes de báscula (consumos que llegaron desde un
+/// concentrador), paginado.
+///
+/// La paginación es keyset sobre `(medido_en, id)` y no OFFSET: los pesajes
+/// entran en vivo mientras alguien mira la pantalla, y con OFFSET cada pesaje
+/// nuevo corre todas las páginas un lugar, así que la página 2 repite la
+/// última fila de la 1 (o se salta una si entró tarde un pesaje viejo por la
+/// cola de la Pi). Con el cursor la página siguiente arranca justo después de
+/// la última fila vista, entre lo que pase en el medio.
+///
+/// Mismo patrón de filtros que `get_llaves_nfc`: SQL estático y cada filtro
+/// se apaga con `$n IS NULL`.
+pub async fn get_pesajes_bascula(
+    pool: &PgPool,
+    filtros: PesajesFiltros,
+) -> Result<PaginaPesajes, ServiceError> {
+    let limite = filtros.limite;
+    let cursor_medido_en = filtros.cursor.map(|c| c.medido_en);
+    let cursor_id = filtros.cursor.map(|c| c.id);
+
+    // Por el CHECK de origen completo, en una fila con `bascula_id` los siete
+    // campos de origen van llenos, y por ser consumo también `programacion_id`
+    // y `operario_id`: de ahí los `!`, que sqlx no puede deducir solo.
+    let mut pesajes = sqlx::query_as!(
+        PesajeListado,
+        r#"
+        SELECT m.id, m.lote_id,
+               m.programacion_id          AS "programacion_id!",
+               m.operario_id              AS "operario_id!",
+               m.bascula_id               AS "bascula_id!",
+               m.peso::float8             AS "peso!",
+               m.medido_en                AS "medido_en!",
+               m.recibido_concentrador_en AS "recibido_concentrador_en!",
+               m.creado_en,
+               m.sesion_arranque          AS "sesion_arranque!",
+               m.transaccion              AS "transaccion!",
+               m.uid_tarjeta              AS "uid_tarjeta!",
+               -- LEFT JOIN, pero el operario siempre está: la FK y el CHECK
+               -- de consumo lo garantizan. El LEFT es para que una fila nunca
+               -- desaparezca del listado del destajo por un join.
+               p.codigo   AS "operario_codigo!",
+               p.nombre   AS "operario_nombre!",
+               p.apellido AS "operario_apellido!",
+               ln.codigo  AS "llave_codigo?",
+               b.codigo   AS bascula_codigo,
+               i.codigo   AS lote_codigo,
+               mp.nombre  AS materia_prima_nombre,
+               cr.corregido AS "corregido!"
+        FROM movimientos_materia_prima m
+        LEFT JOIN personal p ON p.id = m.operario_id
+        -- Sin FK entre `uid_tarjeta` y `llaves_nfc`: una tarjeta dada de baja
+        -- y borrada, o cualquier uid que ya no esté registrado, no tiene que
+        -- tumbar el pesaje. `llaves_nfc.uid` es UNIQUE, así que no duplica.
+        LEFT JOIN llaves_nfc ln ON ln.uid = m.uid_tarjeta
+        JOIN basculas b ON b.id = m.bascula_id
+        JOIN ingresos_materia_prima i ON i.id = m.lote_id
+        JOIN materias_primas mp ON mp.id = i.materia_prima_id
+        -- En un LATERAL y no repetido en el SELECT y el WHERE: es el mismo
+        -- EXISTS para las dos cosas. Lo resuelve idx_movimientos_mp_correccion.
+        CROSS JOIN LATERAL (
+            SELECT EXISTS (
+                SELECT 1 FROM movimientos_materia_prima c
+                WHERE c.corrige_movimiento_id = m.id
+            ) AS corregido
+        ) cr
+        WHERE m.bascula_id IS NOT NULL
+          -- Siempre `medido_en` y nunca `creado_en`: un pesaje que la Pi tuvo
+          -- encolado llega horas después, y por `creado_en` caería en otro
+          -- turno o en otro día del destajo.
+          AND m.medido_en >= $1
+          AND m.medido_en <  $2
+          AND ($3::uuid IS NULL OR m.operario_id = $3)
+          AND ($4::uuid IS NULL OR ln.id = $4)
+          AND ($5::uuid IS NULL OR m.lote_id = $5)
+          AND ($6::uuid IS NULL OR m.programacion_id = $6)
+          AND ($7::uuid IS NULL OR m.bascula_id = $7)
+          -- Por el uid que leyó el lector y no por la llave: encuentra también
+          -- los pesajes de una tarjeta que no está (o ya no está) registrada.
+          AND ($8::text IS NULL OR m.uid_tarjeta = $8)
+          AND ($9::bool IS NULL OR cr.corregido = $9)
+          -- Comparación de filas: estrictamente antes del cursor en el mismo
+          -- orden del ORDER BY, con el id desempatando el mismo instante.
+          AND ($10::timestamptz IS NULL OR (m.medido_en, m.id) < ($10, $11::uuid))
+        ORDER BY m.medido_en DESC, m.id DESC
+        LIMIT $12
+        "#,
+        filtros.desde,
+        filtros.hasta,
+        filtros.operario_id,
+        filtros.llave_id,
+        filtros.lote_id,
+        filtros.programacion_id,
+        filtros.bascula_id,
+        filtros.uid,
+        filtros.corregido,
+        cursor_medido_en,
+        cursor_id,
+        // Una fila de más para saber si hay página siguiente sin un COUNT.
+        limite + 1,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    // `limitar` deja el límite en [1, LIMITE_MAXIMO], así que el cast no pierde
+    // nada.
+    let siguiente_cursor = if pesajes.len() > limite as usize {
+        pesajes.truncate(limite as usize);
+        // El cursor es la última fila que SÍ se devuelve, no la sobrante: la
+        // siguiente página la pide con `<`, así que la sobrante es su primera.
+        pesajes.last().map(|ultimo| CursorPesaje {
+            medido_en: ultimo.medido_en,
+            id: ultimo.id,
+        })
+    } else {
+        None
+    };
+
+    Ok(PaginaPesajes {
+        pesajes,
+        siguiente_cursor,
+    })
+}
+
+/// Totales por operario con los mismos filtros del listado, sin cursor ni
+/// límite.
+///
+/// Van sobre todo el filtro y no sobre la página porque es el número del
+/// destajo: sumarlo en el front con la página que tenga cargada da mal en
+/// cuanto el día pasa de un límite de filas.
+///
+/// Los kg son brutos: no restan los ajustes que corrigen estos pesajes.
+/// `cantidad_corregidos` está para que la pantalla señale al operario que
+/// tiene pesajes corregidos y alguien revise antes de pagar.
+///
+/// No lleva los joins de báscula, lote y materia prima del listado: ninguna
+/// columna de acá sale de ellos, y como son FKs NOT NULL no quitan filas.
+pub async fn get_totales_pesajes_bascula(
+    pool: &PgPool,
+    filtros: &PesajesFiltros,
+) -> Result<Vec<TotalPesajesOperario>, ServiceError> {
+    let totales = sqlx::query_as!(
+        TotalPesajesOperario,
+        r#"
+        SELECT m.operario_id AS "operario_id!",
+               p.codigo      AS "operario_codigo!",
+               p.nombre      AS "operario_nombre!",
+               p.apellido    AS "operario_apellido!",
+               COUNT(*)      AS "cantidad!",
+               -- SUM de NUMERIC es exacto; el float8 es solo para el struct.
+               SUM(m.peso)::float8 AS "kg!",
+               COUNT(*) FILTER (WHERE cr.corregido) AS "cantidad_corregidos!"
+        FROM movimientos_materia_prima m
+        LEFT JOIN personal p ON p.id = m.operario_id
+        LEFT JOIN llaves_nfc ln ON ln.uid = m.uid_tarjeta
+        CROSS JOIN LATERAL (
+            SELECT EXISTS (
+                SELECT 1 FROM movimientos_materia_prima c
+                WHERE c.corrige_movimiento_id = m.id
+            ) AS corregido
+        ) cr
+        -- El mismo WHERE de `get_pesajes_bascula` sin el cursor: si cambia
+        -- uno, cambia el otro, o los totales dejan de cuadrar con el listado.
+        WHERE m.bascula_id IS NOT NULL
+          AND m.medido_en >= $1
+          AND m.medido_en <  $2
+          AND ($3::uuid IS NULL OR m.operario_id = $3)
+          AND ($4::uuid IS NULL OR ln.id = $4)
+          AND ($5::uuid IS NULL OR m.lote_id = $5)
+          AND ($6::uuid IS NULL OR m.programacion_id = $6)
+          AND ($7::uuid IS NULL OR m.bascula_id = $7)
+          AND ($8::text IS NULL OR m.uid_tarjeta = $8)
+          AND ($9::bool IS NULL OR cr.corregido = $9)
+        -- `p.id` es la PK, así que agrupar por él deja usar el resto de sus
+        -- columnas en el SELECT sin listarlas.
+        GROUP BY m.operario_id, p.id
+        -- El código desempata para que el orden no salte entre recargas.
+        ORDER BY SUM(m.peso) DESC, p.codigo
+        "#,
+        filtros.desde,
+        filtros.hasta,
+        filtros.operario_id,
+        filtros.llave_id,
+        filtros.lote_id,
+        filtros.programacion_id,
+        filtros.bascula_id,
+        filtros.uid.as_deref(),
+        filtros.corregido,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(totales)
 }
