@@ -13,6 +13,12 @@ pub async fn route(resto: &str, ctx: Ctx) -> WsResponse {
             }
             controller::programacion_proceso::programacion_proceso_add(ctx).await
         }
+        "programacion_proceso:read" => {
+            if !ctx.permisos.contains("programacion_proceso:read") {
+                return WsResponse::error(ctx.id, 403, "sin permiso");
+            }
+            controller::programacion_proceso::programacion_proceso_read(ctx).await
+        }
         "lotes_materia_prima_procesando:read" => {
             if !ctx.permisos.contains("programacion_proceso:read") {
                 return WsResponse::error(ctx.id, 403, "sin permiso");

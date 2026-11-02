@@ -313,6 +313,65 @@ pub async fn get_pesajes_bascula(
     })
 }
 
+/// Un pesaje de báscula por id, con la misma forma que una fila del listado.
+/// Es para emitir el pesaje recién guardado tal cual lo pinta la pantalla del
+/// destajo, sin que el front tenga que pedirlo de nuevo.
+///
+/// `None` si el id no existe o no es un pesaje de báscula (un ajuste o una
+/// merma no tienen báscula y no salen en el listado).
+///
+/// Las columnas y los joins son los de `get_pesajes_bascula`: si cambia uno,
+/// cambia el otro. Como los dos van contra `PesajeListado`, una columna nueva
+/// que falte acá no compila.
+pub async fn get_pesaje_bascula(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<Option<PesajeListado>, ServiceError> {
+    let pesaje = sqlx::query_as!(
+        PesajeListado,
+        r#"
+        SELECT m.id, m.lote_id,
+               m.programacion_id          AS "programacion_id!",
+               m.operario_id              AS "operario_id!",
+               m.bascula_id               AS "bascula_id!",
+               m.peso::float8             AS "peso!",
+               m.medido_en                AS "medido_en!",
+               m.recibido_concentrador_en AS "recibido_concentrador_en!",
+               m.creado_en,
+               m.sesion_arranque          AS "sesion_arranque!",
+               m.transaccion              AS "transaccion!",
+               m.uid_tarjeta              AS "uid_tarjeta!",
+               p.codigo   AS "operario_codigo!",
+               p.nombre   AS "operario_nombre!",
+               p.apellido AS "operario_apellido!",
+               ln.codigo  AS "llave_codigo?",
+               b.codigo   AS bascula_codigo,
+               i.codigo   AS lote_codigo,
+               mp.nombre  AS materia_prima_nombre,
+               cr.corregido AS "corregido!"
+        FROM movimientos_materia_prima m
+        LEFT JOIN personal p ON p.id = m.operario_id
+        LEFT JOIN llaves_nfc ln ON ln.uid = m.uid_tarjeta
+        JOIN basculas b ON b.id = m.bascula_id
+        JOIN ingresos_materia_prima i ON i.id = m.lote_id
+        JOIN materias_primas mp ON mp.id = i.materia_prima_id
+        CROSS JOIN LATERAL (
+            SELECT EXISTS (
+                SELECT 1 FROM movimientos_materia_prima c
+                WHERE c.corrige_movimiento_id = m.id
+            ) AS corregido
+        ) cr
+        WHERE m.id = $1
+          AND m.bascula_id IS NOT NULL
+        "#,
+        id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(pesaje)
+}
+
 /// Totales por operario con los mismos filtros del listado, sin cursor ni
 /// límite.
 ///

@@ -71,10 +71,11 @@ pub async fn ingreso_lote_materia_prima_add(ctx: Ctx) -> WsResponse {
     }
 
     // El evento tiene que llamarse igual que el permiso: `emit` arma el filtro
-    // como `{event}:read` y el permiso sembrado es `lotes_materias_primas:read`.
+    // como `{event}:read` y el permiso sembrado es `inventario_materia_prima:read`.
+    // Es el módulo de la semilla, no el nombre de la tabla.
     if alta.creado {
         ctx.emit(
-            "lotes_materias_primas",
+            "inventario_materia_prima",
             "add",
             serde_json::json!({ "data": alta.ingreso }),
         );

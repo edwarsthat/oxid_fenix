@@ -4,7 +4,9 @@ use uuid::Uuid;
 
 use crate::{
     models::proceso::programacion_proceso::{
-        AltaProgramacionProceso, ProgramacionProceso, ProgramacionProcesoNuevo,
+        AltaProgramacionProceso, CursorProgramacion, PaginaProgramaciones,
+        ProgramacionHistorial, ProgramacionProceso, ProgramacionProcesoNuevo,
+        ProgramacionesFiltros,
     },
     services::error::ServiceError,
 };
@@ -265,4 +267,93 @@ where
     .await?;
 
     Ok(programacion)
+}
+
+/// Historial de programaciones: qué lotes se montaron en la línea, cuándo, quién
+/// los montó y los cerró, y cuánto se pesó en cada montaje. Paginado por
+/// cursor, de la más reciente a la más vieja.
+///
+/// Un lote sale tantas veces como se haya montado: cada fila es un montaje, no
+/// un lote. Con `lote_id` en los filtros se ve la historia completa de uno.
+///
+/// El rango se cruza con el intervalo y no con `inicio_en`: un lote montado a
+/// las 11 p. m. que corrió hasta las 2 a. m. también se procesó el día
+/// siguiente, y filtrando por inicio no saldría ahí. La que sigue abierta
+/// cuenta como que no ha terminado.
+pub async fn get_historial_programaciones(
+    pool: &PgPool,
+    filtros: ProgramacionesFiltros,
+) -> Result<PaginaProgramaciones, ServiceError> {
+    let limite = filtros.limite;
+    let cursor_inicio_en = filtros.cursor.map(|c| c.inicio_en);
+    let cursor_id = filtros.cursor.map(|c| c.id);
+
+    // Los kg salen en un LATERAL y no en un GROUP BY de toda la consulta: el
+    // LIMIT corta antes, así que solo se suman los pesajes de las filas de la
+    // página. Cada suma la resuelve idx_movimientos_mp_programacion.
+    //
+    // Solo `consumo`: los ajustes y las mermas no son lo que pasó por la
+    // báscula, y además no llevan `programacion_id`.
+    let mut programaciones = sqlx::query_as!(
+        ProgramacionHistorial,
+        r#"
+        SELECT pp.id, pp.lote_id, pp.linea, pp.inicio_en, pp.fin_en,
+               pp.observaciones,
+               i.codigo    AS lote_codigo,
+               mp.nombre   AS materia_prima_nombre,
+               pr.nombre   AS predio_nombre,
+               up.nombre   AS programado_por_nombre,
+               up.apellido AS programado_por_apellido,
+               uc.nombre   AS "cerrado_por_nombre?",
+               uc.apellido AS "cerrado_por_apellido?",
+               pz.cantidad_pesajes AS "cantidad_pesajes!",
+               pz.kg_pesados       AS "kg_pesados!"
+        FROM programaciones_proceso pp
+        JOIN ingresos_materia_prima i ON i.id = pp.lote_id
+        JOIN materias_primas mp ON mp.id = i.materia_prima_id
+        JOIN predios pr ON pr.id = i.predio_id
+        JOIN usuarios up ON up.id = pp.programado_por
+        -- LEFT: la que sigue abierta no tiene quién la cerró.
+        LEFT JOIN usuarios uc ON uc.id = pp.cerrado_por
+        CROSS JOIN LATERAL (
+            SELECT COUNT(*)                          AS cantidad_pesajes,
+                   COALESCE(SUM(m.peso), 0)::float8  AS kg_pesados
+            FROM movimientos_materia_prima m
+            WHERE m.programacion_id = pp.id
+              AND m.tipo = 'consumo'
+        ) pz
+        WHERE ($1::timestamptz IS NULL OR pp.fin_en IS NULL OR pp.fin_en > $1)
+          AND ($2::timestamptz IS NULL OR pp.inicio_en < $2)
+          AND ($3::uuid IS NULL OR pp.lote_id = $3)
+          -- Estrictamente antes del cursor en el mismo orden del ORDER BY.
+          AND ($4::timestamptz IS NULL OR (pp.inicio_en, pp.id) < ($4, $5::uuid))
+        ORDER BY pp.inicio_en DESC, pp.id DESC
+        LIMIT $6
+        "#,
+        filtros.desde,
+        filtros.hasta,
+        filtros.lote_id,
+        cursor_inicio_en,
+        cursor_id,
+        // Una fila de más para saber si hay página siguiente sin un COUNT.
+        limite + 1,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let siguiente_cursor = if programaciones.len() > limite as usize {
+        programaciones.truncate(limite as usize);
+        // La última fila que SÍ se devuelve: la siguiente página pide con `<`.
+        programaciones.last().map(|ultima| CursorProgramacion {
+            inicio_en: ultima.inicio_en,
+            id: ultima.id,
+        })
+    } else {
+        None
+    };
+
+    Ok(PaginaProgramaciones {
+        programaciones,
+        siguiente_cursor,
+    })
 }

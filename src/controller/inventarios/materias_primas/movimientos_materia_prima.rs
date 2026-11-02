@@ -11,7 +11,7 @@ use crate::{
         validations::Validar,
     }, routes::protocol::{Ctx, Evento, WsEvent, WsResponse}, services::{
         dispositivos::basculas::bascula_por_device_id, error::ServiceError, inventarios::{
-            llaves_nfc::get_empleado_con_llave_en, materias_primas::movimientos_materia_prima::{add_consumo_bascula, existe_clave_idempotencia, get_pesajes_bascula, get_totales_pesajes_bascula},
+            llaves_nfc::get_empleado_con_llave_en, materias_primas::movimientos_materia_prima::{add_consumo_bascula, existe_clave_idempotencia, get_pesaje_bascula, get_pesajes_bascula, get_totales_pesajes_bascula},
         }, logs::audit_logs::create_audit_log, proceso::programacion_proceso::get_programacion_en,
     },
 };
@@ -144,13 +144,32 @@ pub async fn ingreso_movimiento_materia_prima(
         return Ok(StatusCode::CONFLICT);
     }
 
+    // Se emite la fila tal como la devuelve `pesajes_bascula:read`, para que
+    // la pantalla del destajo la meta en la lista sin volver a pedir la página.
+    // Si la búsqueda falla no se responde error: el pesaje ya quedó guardado, y
+    // un 500 haría que la Pi lo reintentara. Solo se pierde el aviso en vivo.
+    let pesaje = match get_pesaje_bascula(&state.pool, alta.movimiento.id).await {
+        Ok(Some(pesaje)) => pesaje,
+        Ok(None) => {
+            tracing::error!(
+                "[ingreso_movimiento_materia_prima] el pesaje {} no se encontró después del commit",
+                alta.movimiento.id
+            );
+            return Ok(StatusCode::CREATED);
+        }
+        Err(err) => {
+            tracing::error!("[ingreso_movimiento_materia_prima] {err}");
+            return Ok(StatusCode::CREATED);
+        }
+    };
+
     // Sin `Ctx` no hay `ctx.emit`: se arma el mismo evento a mano. El permiso
     // sigue la convención de `emit` (`{event}:read`), así lo reciben las
     // pantallas que ya escuchan el inventario de materia prima.
     let evento = WsEvent {
         event: "inventario_materia_prima".into(),
         action: "consumo".into(),
-        data: serde_json::json!({ "data": alta.movimiento }),
+        data: serde_json::json!({ "data": pesaje }),
     };
     if let Ok(json) = serde_json::to_string(&evento) {
         let _ = state.eventos.send(Arc::new(Evento {

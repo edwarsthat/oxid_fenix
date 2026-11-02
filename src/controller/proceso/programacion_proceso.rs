@@ -1,10 +1,14 @@
 use crate::{
-    models::{proceso::programacion_proceso::ProgramacionProcesoAddPayload, validations::Validar},
+    models::{
+        proceso::programacion_proceso::{ProgramacionProcesoAddPayload, ProgramacionesReadPayload},
+        validations::Validar,
+    },
     routes::protocol::{Ctx, WsResponse},
     services::{
         logs::audit_logs::create_audit_log,
         proceso::programacion_proceso::{
-            add_programacion_proceso, get_lotes_materia_prima_procesando,
+            add_programacion_proceso, get_historial_programaciones,
+            get_lotes_materia_prima_procesando,
         },
     },
 };
@@ -95,5 +99,33 @@ pub async fn lotes_materia_prima_procesando_get(ctx: Ctx) -> WsResponse {
     match get_lotes_materia_prima_procesando(&ctx.state.pool).await {
         Ok(lotes) => WsResponse::ok(ctx.id, serde_json::json!({ "data": lotes })),
         Err(err) => WsResponse::from_service_error(ctx.id, "lotes_materia_prima_procesando", err),
+    }
+}
+
+/// Historial de programaciones: cada montaje de un lote en la línea, con lo
+/// que se pesó mientras estuvo montado. Paginado por cursor.
+pub async fn programacion_proceso_read(ctx: Ctx) -> WsResponse {
+    let payload: ProgramacionesReadPayload =
+        match serde_json::from_value(serde_json::Value::Object(ctx.data.clone())) {
+            Ok(p) => p,
+            Err(err) => return WsResponse::error(ctx.id, 400, &format!("Payload invalido: {err}")),
+        };
+
+    let filtros = match payload.validar() {
+        Ok(filtros) => filtros,
+        Err(err) => return WsResponse::error(ctx.id, 400, &format!("Datos invalidos: {err}")),
+    };
+
+    match get_historial_programaciones(&ctx.state.pool, filtros).await {
+        Ok(pagina) => WsResponse::ok(
+            ctx.id,
+            serde_json::json!({
+                "data": {
+                    "programaciones": pagina.programaciones,
+                    "siguiente_cursor": pagina.siguiente_cursor,
+                }
+            }),
+        ),
+        Err(err) => WsResponse::from_service_error(ctx.id, "programacion_proceso_read", err),
     }
 }

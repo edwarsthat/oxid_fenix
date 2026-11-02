@@ -3,7 +3,14 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::models::validations::{ValidacionError, Validar, texto_opcional, uuid_requerido};
+use crate::models::validations::{
+    Rango, ValidacionError, Validar, limitar, texto_opcional, uuid_requerido,
+};
+
+/// Filas por página del historial cuando el cliente no manda `limite`. Más
+/// bajo que el default general: son filas anchas, con nombres y sumas, y la
+/// pantalla muestra unas pocas a la vez.
+const LIMITE_HISTORIAL_POR_DEFECTO: i64 = 50;
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct ProgramacionProceso {
@@ -90,6 +97,110 @@ impl Validar for ProgramacionProcesoAddPayload {
     }
 }
 
+/// Posición en el historial: el (inicio_en, id) de la última fila que recibió
+/// el cliente. El `id` desempata dos programaciones del mismo instante, que
+/// con una sola línea no debería pasar pero no cuesta nada cubrir.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub struct CursorProgramacion {
+    pub inicio_en: DateTime<Utc>,
+    pub id: Uuid,
+}
+
+/// Lo que manda el cliente para el historial. Todo es opcional: sin nada trae
+/// la primera página de lo más reciente.
+///
+/// `lote_id` va como `Uuid` y no como texto (a diferencia del alta) por lo
+/// mismo que en los pesajes: es un filtro que el front saca de una lista, no
+/// algo que alguien escribe a mano.
+#[derive(Debug, Deserialize)]
+pub struct ProgramacionesReadPayload {
+    /// Instantes UTC que el front ya calculó para el día local, igual que en
+    /// los pesajes: el servidor no corta por `::date`.
+    pub rango: Option<Rango<DateTime<Utc>>>,
+    pub lote_id: Option<Uuid>,
+    pub limite: Option<i64>,
+    pub cursor: Option<CursorProgramacion>,
+}
+
+impl Validar for ProgramacionesReadPayload {
+    type Datos = ProgramacionesFiltros;
+
+    fn validar(self) -> Result<Self::Datos, ValidacionError> {
+        // Sin tope de días: son pocas filas por día y el cursor ya corta la
+        // página. Solo se revisa que el rango no venga al revés.
+        let (desde, hasta) = match self.rango {
+            Some(rango) => {
+                let rango = rango.validar()?;
+                (rango.desde(), rango.hasta())
+            }
+            None => (None, None),
+        };
+
+        let limite = limitar(Some(self.limite.unwrap_or(LIMITE_HISTORIAL_POR_DEFECTO)));
+
+        Ok(ProgramacionesFiltros {
+            desde,
+            hasta,
+            lote_id: self.lote_id,
+            limite,
+            cursor: self.cursor,
+        })
+    }
+}
+
+/// Lo que consume `get_historial_programaciones`.
+///
+/// El rango es opcional a diferencia del de los pesajes: acá hay unas pocas
+/// filas por día y no hay totales que sin fechas no signifiquen nada, así que
+/// el cursor solo alcanza para no traer la tabla entera.
+#[derive(Debug)]
+pub struct ProgramacionesFiltros {
+    /// Inclusivo. Se compara contra el intervalo entero, no contra `inicio_en`.
+    pub desde: Option<DateTime<Utc>>,
+    /// Exclusivo.
+    pub hasta: Option<DateTime<Utc>>,
+    /// Todas las veces que se montó un lote: se monta, se para, se retoma.
+    pub lote_id: Option<Uuid>,
+    pub limite: i64,
+    pub cursor: Option<CursorProgramacion>,
+}
+
+/// Una fila del historial: la programación más lo que hace falta para leerla
+/// sin ir a otras pantallas (qué lote, de dónde, quién lo montó y lo cerró) y
+/// lo que se pesó mientras estuvo montada.
+#[derive(Debug, FromRow, Serialize)]
+pub struct ProgramacionHistorial {
+    pub id: Uuid,
+    pub lote_id: Uuid,
+    pub linea: i16,
+    /// `fin_en` en `None` es lo que está en la línea ahora.
+    pub inicio_en: DateTime<Utc>,
+    pub fin_en: Option<DateTime<Utc>>,
+    pub observaciones: Option<String>,
+
+    pub lote_codigo: String,
+    pub materia_prima_nombre: String,
+    pub predio_nombre: String,
+
+    pub programado_por_nombre: String,
+    pub programado_por_apellido: String,
+    pub cerrado_por_nombre: Option<String>,
+    pub cerrado_por_apellido: Option<String>,
+
+    /// Pesajes de báscula colgados de esta programación.
+    pub cantidad_pesajes: i64,
+    /// Brutos, igual que los totales del destajo: no restan los ajustes que
+    /// corrigen estos pesajes.
+    pub kg_pesados: f64,
+}
+
+/// Una página del historial. `siguiente_cursor` en `None` es la última página.
+#[derive(Debug, Serialize)]
+pub struct PaginaProgramaciones {
+    pub programaciones: Vec<ProgramacionHistorial>,
+    pub siguiente_cursor: Option<CursorProgramacion>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,6 +239,73 @@ mod tests {
         let nuevo = payload.validar().expect("deberia ser valido");
 
         assert_eq!(nuevo.observaciones, None);
+    }
+
+    fn read_payload() -> ProgramacionesReadPayload {
+        ProgramacionesReadPayload {
+            rango: None,
+            lote_id: None,
+            limite: None,
+            cursor: None,
+        }
+    }
+
+    #[test]
+    fn historial_sin_filtros_usa_el_limite_del_historial() {
+        let filtros = read_payload().validar().expect("deberia ser valido");
+
+        assert_eq!(filtros.desde, None);
+        assert_eq!(filtros.hasta, None);
+        assert_eq!(filtros.limite, LIMITE_HISTORIAL_POR_DEFECTO);
+    }
+
+    #[test]
+    fn historial_acota_el_limite() {
+        let payload = ProgramacionesReadPayload {
+            limite: Some(0),
+            ..read_payload()
+        };
+        assert_eq!(payload.validar().unwrap().limite, 1);
+
+        let payload = ProgramacionesReadPayload {
+            limite: Some(1_000_000),
+            ..read_payload()
+        };
+        assert_eq!(
+            payload.validar().unwrap().limite,
+            crate::models::validations::LIMITE_MAXIMO
+        );
+    }
+
+    #[test]
+    fn historial_rechaza_el_rango_al_reves() {
+        let payload = ProgramacionesReadPayload {
+            rango: Some(Rango {
+                desde: Some("2026-11-02T05:00:00Z".parse().unwrap()),
+                hasta: Some("2026-11-01T05:00:00Z".parse().unwrap()),
+            }),
+            ..read_payload()
+        };
+
+        assert!(payload.validar().is_err());
+    }
+
+    /// Una sola punta vale: "desde el lunes" sin fin es una consulta normal.
+    #[test]
+    fn historial_acepta_el_rango_con_una_sola_punta() {
+        let desde: DateTime<Utc> = "2026-11-01T05:00:00Z".parse().unwrap();
+        let payload = ProgramacionesReadPayload {
+            rango: Some(Rango {
+                desde: Some(desde),
+                hasta: None,
+            }),
+            ..read_payload()
+        };
+
+        let filtros = payload.validar().expect("deberia ser valido");
+
+        assert_eq!(filtros.desde, Some(desde));
+        assert_eq!(filtros.hasta, None);
     }
 
     /// Sin lote no hay qué programar: el error lo damos nosotros en español y
