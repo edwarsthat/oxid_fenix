@@ -21,7 +21,7 @@ use crate::{
         inventarios::materias_primas::movimientos_materia_prima::ingreso_movimiento_materia_prima,
         sistema::auth::{change_password, login},
     },
-    routes::protocol::Evento,
+    routes::protocol::{Evento, WsResponse},
     security::{
         concentrador::autenticar_concentrador,
         rate_limit::{RateLimiter, limitar},
@@ -59,6 +59,12 @@ mod limites {
     /// abierto. Deja margen para reconexiones cuando se cae la red, pero corta
     /// el ciclo de abrir y cerrar conexiones sin parar.
     pub const WS: (u32, u32) = (20, 20);
+
+    /// Cuántas peticiones puede tener en curso un mismo socket. Cuando se
+    /// llena, el loop deja de leer mensajes nuevos hasta que termine alguna:
+    /// el cliente espera, pero no puede crear tareas sin límite ni acaparar el
+    /// pool.
+    pub const MAX_PETICIONES_POR_SOCKET: usize = 8;
 }
 
 /// Cada endpoint estrena su propia cubeta: gastar el cupo de `/health` no puede
@@ -144,14 +150,34 @@ async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, ses
     let (mut sender, mut receiver) = socket.split();
     let mut eventos_rx = state.eventos.subscribe();
 
+    // Las tareas no pueden escribir al socket (`sender` necesita &mut y es de
+    // este loop). Mandan su respuesta ya serializada por aquí, y el loop es el
+    // único que escribe.
+    let (resp_tx, mut resp_rx) = tokio::sync::mpsc::channel::<String>(32);
+    let cupo = Arc::new(tokio::sync::Semaphore::new(
+        limites::MAX_PETICIONES_POR_SOCKET,
+    ));
+
     loop {
         tokio::select! {
         msg = receiver.next() => {
             match msg {
                 Some(Ok(Message::Text(text))) => {
-                     let resp = crate::routes::dispatcher::dispatch(&text, &state).await;
-                     let Ok(json) = serde_json::to_string(&resp) else { continue };
-                     if sender.send(Message::Text(json.into())).await.is_err() { break; }
+                    // Se espera un cupo libre antes de lanzar la tarea. El
+                    // semáforo nunca se cierra, así que esto no falla.
+                    let Ok(permiso) = cupo.clone().acquire_owned().await else { break };
+
+                    let state = state.clone();
+                    let resp_tx = resp_tx.clone();
+                    tokio::spawn(async move {
+                        let resp = crate::routes::dispatcher::dispatch(&text, &state).await;
+                        let json = serializar_respuesta(&resp);
+                        // Si el socket ya se cerró, el loop soltó `resp_rx` y
+                        // esto falla: no hay a quién contestarle, se ignora.
+                        let _ = resp_tx.send(json).await;
+                        // El cupo se libera al terminar la tarea.
+                        drop(permiso);
+                    });
                 }
                 Some(Ok(_)) => {}
                 Some(Err(e)) => {
@@ -163,6 +189,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, ses
                     break;
                 }
             }
+        }
+
+        // Respuestas de las tareas que ya terminaron, en el orden en que
+        // terminan (no en el que llegaron): el front las empareja por `id`.
+        // Nunca da None porque este loop guarda un `resp_tx`.
+        Some(json) = resp_rx.recv() => {
+            if sender.send(Message::Text(json.into())).await.is_err() { break; }
         }
 
         evento = eventos_rx.recv() => {
@@ -178,6 +211,22 @@ async fn handle_socket(socket: WebSocket, state: AppState, session_id: Uuid, ses
                 Err(_) => break,
             }
         }
+        }
+    }
+}
+
+/// Serializa la respuesta y, si falla, devuelve un 500 con el mismo `id`. Antes
+/// se hacía `continue` y el cliente quedaba esperando una respuesta que nunca
+/// iba a llegar.
+fn serializar_respuesta(resp: &WsResponse) -> String {
+    match serde_json::to_string(resp) {
+        Ok(json) => json,
+        Err(err) => {
+            tracing::error!("[ws] no se pudo serializar la respuesta {}: {err}", resp.id);
+            let fallback = WsResponse::error(resp.id.clone(), 500, "error interno");
+            serde_json::to_string(&fallback).unwrap_or_else(|_| {
+                r#"{"id":"","status":500,"message":"error interno"}"#.to_string()
+            })
         }
     }
 }
