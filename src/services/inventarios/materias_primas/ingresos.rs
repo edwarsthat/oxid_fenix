@@ -82,6 +82,10 @@ fn map_conflicto_ingreso(err: sqlx::Error) -> ServiceError {
 /// la tablet de báscula reintentando porque se le cayó la señal justo después
 /// del INSERT — la segunda devuelve el lote que ya se creó, con `creado: false`,
 /// en vez de un lote gemelo o un 409 que el usuario no sabría qué hacer.
+///
+/// Si la clave ya está pero los datos son otros no es un reintento, y sale
+/// `ClaveReutilizada`: devolver el lote viejo como éxito perdería el ingreso
+/// nuevo sin que nadie se entere.
 pub async fn add_ingreso_lote_materia_prima(
     conexion: &mut sqlx::PgConnection,
     datos: IngresoNuevo,
@@ -152,9 +156,8 @@ pub async fn add_ingreso_lote_materia_prima(
         });
     }
 
-    // No insertó: la clave ya estaba, o sea que este es el reintento de un alta
-    // que sí funcionó. Se devuelve el lote de la primera, que es lo que el
-    // cliente estaba esperando cuando se le cayó la señal.
+    // No insertó: la clave ya estaba. Se busca el lote que la usó, para saber si
+    // este es el reintento de ese mismo alta o si son otros datos.
     let existente = sqlx::query_as!(
         Ingreso,
         r#"
@@ -177,6 +180,17 @@ pub async fn add_ingreso_lote_materia_prima(
     // las dos consultas, y un ingreso no se borra: eso es un 500, no un 404.
     .map_err(map_conflicto_ingreso)?;
 
+    if !datos.coincide_con(&existente) {
+        return Err(ServiceError::ClaveReutilizada(format!(
+            "Ya se guardó el lote {} (placa {}) desde este formulario y lo que cambiaste no se \
+             guardó. Si es otro camión, cierra y abre un formulario nuevo. Si es el mismo, no lo \
+             registres otra vez: hay que corregir ese lote.",
+            existente.codigo, existente.placa
+        )));
+    }
+
+    // El mismo camión: se devuelve el lote de la primera, que es lo que el
+    // cliente estaba esperando cuando se le cayó la señal.
     Ok(AltaIngreso {
         ingreso: existente,
         creado: false,

@@ -95,6 +95,7 @@ impl WsResponse {
             ServiceError::NotFound(msg) => Self::error(id, 404, &msg),
             ServiceError::Conflict(msg) => Self::error(id, 409, &msg),
             ServiceError::VersionDesactualizada(msg) => Self::error(id, 412, &msg),
+            ServiceError::ClaveReutilizada(msg) => Self::error(id, 422, &msg),
             ServiceError::BadRequest(msg) => Self::error(id, 400, &msg),
             err => Self::internal_error(id, ctx, err),
         }
@@ -132,6 +133,20 @@ mod tests {
 
         assert_eq!(resp.status, 409);
         assert_eq!(resp.message, "ya existe un cargo con ese nombre");
+    }
+
+    #[test]
+    fn from_service_error_clave_reutilizada_devuelve_422() {
+        // sin su propia rama caería en el caso general y saldría como 500
+        let resp = WsResponse::from_service_error(
+            "id-5",
+            "ctx",
+            ServiceError::ClaveReutilizada("ya se guardó el lote LT-202609-00001".into()),
+        );
+
+        assert_eq!(resp.id, "id-5");
+        assert_eq!(resp.status, 422);
+        assert_eq!(resp.message, "ya se guardó el lote LT-202609-00001");
     }
 
     #[test]

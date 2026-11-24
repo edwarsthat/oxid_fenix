@@ -140,6 +140,34 @@ pub struct IngresoNuevo {
     pub observaciones: Option<String>,
 }
 
+impl IngresoNuevo {
+    /// ¿Es el reintento del mismo camión? Los datos ya vienen normalizados por
+    /// `validar()`.
+    ///
+    /// No se comparan `llegada_en`, que el cliente genera en cada envío, ni los
+    /// descargues, que pueden marcarse después del alta: un reintento legítimo
+    /// saldría rechazado.
+    pub fn coincide_con(&self, i: &Ingreso) -> bool {
+        // NUMERIC(12,2) que viaja como f64: no se compara con ==. El cliente
+        // puede mandar más de dos decimales y la columna redondea, así que lo
+        // guardado se aleja hasta 0.005 de lo enviado (22.455 vuelve como
+        // 22.46). La tolerancia va apenas por encima de eso y por debajo de
+        // 0.01, que es lo mínimo que separa dos pesos guardados distintos.
+        let mismo_peso = |a: f64, b: f64| (a - b).abs() < 0.006;
+
+        self.predio_id == i.predio_id
+            && self.materia_prima_id == i.materia_prima_id
+            && self.placa == i.placa
+            && self.numero_remision == i.numero_remision
+            && self.numero_tiquete_bascula == i.numero_tiquete_bascula
+            // None = la puso la base, no hay contra qué comparar.
+            && self.fecha_ingreso.is_none_or(|f| f == i.fecha_ingreso)
+            && mismo_peso(self.peso_ingreso, i.peso_ingreso)
+            && mismo_peso(self.peso_devuelto, i.peso_devuelto)
+            && self.observaciones == i.observaciones
+    }
+}
+
 /// La placa se guarda normalizada, como dice el comentario de la migración:
 /// mayúsculas y sin espacios ni guiones, para que "abc-123", "ABC 123" y
 /// "ABC123" sean la misma placa al buscar. El CHECK de la tabla la atraparía
@@ -562,5 +590,133 @@ mod tests {
         };
 
         assert!(payload.validar().is_ok());
+    }
+
+    // ── coincide_con ────────────────────────────────
+
+    fn nuevo() -> IngresoNuevo {
+        IngresoAddPayload {
+            numero_remision: Some("R-4471".into()),
+            numero_tiquete_bascula: Some("T-100".into()),
+            fecha_ingreso: Some("2026-08-31".into()),
+            llegada_en: Some("2026-08-31T05:30:00-05:00".into()),
+            peso_devuelto: Some(50.0),
+            observaciones: Some("llegó mojado".into()),
+            ..add_payload()
+        }
+        .validar()
+        .expect("deberia ser valido")
+    }
+
+    /// La fila que habría quedado guardada al registrar `datos`.
+    fn guardado(datos: &IngresoNuevo) -> Ingreso {
+        let ahora = Utc::now();
+        Ingreso {
+            id: Uuid::new_v4(),
+            codigo: "LT-202608-00001".into(),
+            clave_idempotencia: datos.clave_idempotencia,
+            predio_id: datos.predio_id,
+            materia_prima_id: datos.materia_prima_id,
+            placa: datos.placa.clone(),
+            numero_remision: datos.numero_remision.clone(),
+            numero_tiquete_bascula: datos.numero_tiquete_bascula.clone(),
+            fecha_ingreso: datos.fecha_ingreso.unwrap_or(ahora.date_naive()),
+            llegada_en: datos.llegada_en.unwrap_or(ahora),
+            inicio_descargue_en: datos.inicio_descargue_en,
+            fin_descargue_en: datos.fin_descargue_en,
+            peso_ingreso: datos.peso_ingreso,
+            peso_devuelto: datos.peso_devuelto,
+            cerrado_en: None,
+            observaciones: datos.observaciones.clone(),
+            registrado_por: Uuid::new_v4(),
+            anulado_en: None,
+            anulado_por: None,
+            motivo_anulacion: None,
+            version: 1,
+            creado_en: ahora,
+            actualizado_en: ahora,
+        }
+    }
+
+    #[test]
+    fn coincide_con_datos_iguales() {
+        let datos = nuevo();
+        assert!(datos.coincide_con(&guardado(&datos)));
+    }
+
+    #[test]
+    fn no_coincide_con_otra_placa() {
+        // el caso que motivó la comparación: otro camión con la misma clave
+        let datos = nuevo();
+        let existente = guardado(&datos);
+        let otro = IngresoNuevo {
+            placa: "XYZ789".into(),
+            ..datos
+        };
+
+        assert!(!otro.coincide_con(&existente));
+    }
+
+    #[test]
+    fn no_coincide_si_cambia_cualquier_otro_dato_comparado() {
+        let cambios: [(&str, fn(&mut IngresoNuevo)); 8] = [
+            ("predio_id", |d| d.predio_id = Uuid::new_v4()),
+            ("materia_prima_id", |d| d.materia_prima_id = Uuid::new_v4()),
+            ("numero_remision", |d| d.numero_remision = None),
+            ("numero_tiquete_bascula", |d| {
+                d.numero_tiquete_bascula = Some("T-101".into())
+            }),
+            ("fecha_ingreso", |d| {
+                d.fecha_ingreso = NaiveDate::from_ymd_opt(2026, 9, 1)
+            }),
+            ("peso_ingreso", |d| d.peso_ingreso += 0.01),
+            ("peso_devuelto", |d| d.peso_devuelto += 0.01),
+            ("observaciones", |d| d.observaciones = None),
+        ];
+
+        for (campo, cambiar) in cambios {
+            let mut datos = nuevo();
+            let existente = guardado(&datos);
+            cambiar(&mut datos);
+
+            assert!(!datos.coincide_con(&existente), "cambió {campo}");
+        }
+    }
+
+    #[test]
+    fn coincide_con_otra_llegada_u_otros_descargues() {
+        // el cliente genera la llegada en cada envío, y el descargue se puede
+        // marcar después: ninguno de los dos vuelve distinto al camión
+        let mut datos = nuevo();
+        let existente = guardado(&datos);
+        let despues = existente.llegada_en + chrono::Duration::minutes(5);
+        datos.llegada_en = Some(despues);
+        datos.inicio_descargue_en = Some(despues);
+        datos.fin_descargue_en = Some(despues);
+
+        assert!(datos.coincide_con(&existente));
+    }
+
+    #[test]
+    fn coincide_con_fecha_de_ingreso_vacia() {
+        // la puso la base en el primer intento: no hay contra qué compararla
+        let mut datos = nuevo();
+        let existente = guardado(&datos);
+        datos.fecha_ingreso = None;
+
+        assert!(datos.coincide_con(&existente));
+    }
+
+    #[test]
+    fn coincide_con_el_peso_que_redondeo_la_columna() {
+        // NUMERIC(12,2): 22.455 se guarda como 22.46
+        let mut datos = nuevo();
+        datos.peso_ingreso = 22.455;
+        datos.peso_devuelto = 1.234;
+        let mut existente = guardado(&datos);
+        existente.peso_ingreso = 22.46;
+        existente.peso_devuelto = 1.23;
+
+        assert!(datos.coincide_con(&existente));
     }
 }
